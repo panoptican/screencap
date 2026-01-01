@@ -1,0 +1,35 @@
+appId: com.screencap.app
+productName: Screencap
+directories:
+  buildResources: build
+  output: dist
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.*'
+  - '!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+asarUnpack:
+  - node_modules/sharp/**/*
+  - node_modules/better-sqlite3/**/*
+mac:
+  entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    NSScreenCaptureUsageDescription: Screencap needs screen recording permission to capture screenshots for activity tracking.
+  notarize: false
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+    - target: zip
+      arch:
+        - arm64
+        - x64
+dmg:
+  artifactName: ${name}-${version}-${arch}.${ext}
+publish:
+  provider: github
+  owner: ${GH_OWNER:-yahorbarkouski}
+  repo: ${GH_REPO:-screencap}
+  releaseType: release

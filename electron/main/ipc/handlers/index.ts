@@ -1,0 +1,10 @@
+export { registerAppHandlers } from "./app";
+export { registerCaptureHandlers } from "./capture";
+export { registerLLMHandlers } from "./llm";
+export { registerPermissionHandlers } from "./permissions";
+export { registerPopupHandlers } from "./popup";
+export { registerSchedulerHandlers } from "./scheduler";
+export { registerSettingsHandlers } from "./settings";
+export { registerStorageHandlers } from "./storage";
+export { registerUpdateHandlers } from "./update";
+export { registerWindowHandlers } from "./window";

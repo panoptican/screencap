@@ -1,0 +1,125 @@
+import type Database from "better-sqlite3";
+import { createLogger } from "../log";
+
+const logger = createLogger({ scope: "Schema" });
+
+export function createTables(db: Database.Database): void {
+	logger.info("Creating tables if not exists");
+
+	db.exec(`
+    CREATE TABLE IF NOT EXISTS events (
+      id TEXT PRIMARY KEY,
+      timestamp INTEGER NOT NULL,
+      end_timestamp INTEGER,
+      display_id TEXT,
+      category TEXT,
+      subcategories TEXT,
+      project TEXT,
+      project_progress INTEGER DEFAULT 0,
+      project_progress_confidence REAL,
+      project_progress_evidence TEXT,
+      tags TEXT,
+      confidence REAL,
+      caption TEXT,
+      tracked_addiction TEXT,
+      addiction_candidate TEXT,
+      addiction_confidence REAL,
+      addiction_prompt TEXT,
+      thumbnail_path TEXT,
+      original_path TEXT,
+      stable_hash TEXT,
+      detail_hash TEXT,
+      merged_count INTEGER DEFAULT 1,
+      dismissed INTEGER DEFAULT 0,
+      user_label TEXT,
+      status TEXT DEFAULT 'pending',
+      app_bundle_id TEXT,
+      app_name TEXT,
+      window_title TEXT,
+      url_host TEXT,
+      url_canonical TEXT,
+      content_kind TEXT,
+      content_id TEXT,
+      content_title TEXT,
+      is_fullscreen INTEGER DEFAULT 0,
+      context_provider TEXT,
+      context_confidence REAL,
+      context_key TEXT,
+      context_json TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS event_screenshots (
+      id TEXT PRIMARY KEY,
+      event_id TEXT NOT NULL,
+      display_id TEXT NOT NULL,
+      is_primary INTEGER DEFAULT 0,
+      thumbnail_path TEXT NOT NULL,
+      original_path TEXT NOT NULL,
+      stable_hash TEXT,
+      detail_hash TEXT,
+      width INTEGER NOT NULL,
+      height INTEGER NOT NULL,
+      timestamp INTEGER NOT NULL,
+      FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS favicons (
+      host TEXT PRIMARY KEY,
+      path TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS memory (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL,
+      content TEXT NOT NULL,
+      description TEXT,
+      created_at INTEGER,
+      updated_at INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS queue (
+      id TEXT PRIMARY KEY,
+      event_id TEXT NOT NULL,
+      image_data TEXT NOT NULL,
+      attempts INTEGER DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS stories (
+      id TEXT PRIMARY KEY,
+      period_type TEXT NOT NULL,
+      period_start INTEGER NOT NULL,
+      period_end INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+  `);
+
+	logger.info("Tables created");
+}
+
+export function createIndexes(db: Database.Database): void {
+	logger.info("Creating indexes if not exists");
+
+	db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_events_display_timestamp ON events(display_id, timestamp);
+    CREATE INDEX IF NOT EXISTS idx_events_category ON events(category);
+    CREATE INDEX IF NOT EXISTS idx_events_project_progress ON events(project_progress);
+    CREATE INDEX IF NOT EXISTS idx_events_project_progress_project_timestamp ON events(project_progress, project, timestamp);
+    CREATE INDEX IF NOT EXISTS idx_events_status ON events(status);
+    CREATE INDEX IF NOT EXISTS idx_events_app_bundle_id ON events(app_bundle_id);
+    CREATE INDEX IF NOT EXISTS idx_events_url_host ON events(url_host);
+    CREATE INDEX IF NOT EXISTS idx_events_content_kind ON events(content_kind);
+    CREATE INDEX IF NOT EXISTS idx_events_context_key ON events(context_key);
+    CREATE INDEX IF NOT EXISTS idx_event_screenshots_event_id ON event_screenshots(event_id);
+    CREATE INDEX IF NOT EXISTS idx_event_screenshots_event_primary ON event_screenshots(event_id, is_primary);
+    CREATE INDEX IF NOT EXISTS idx_favicons_updated_at ON favicons(updated_at);
+    CREATE INDEX IF NOT EXISTS idx_memory_type ON memory(type);
+    CREATE INDEX IF NOT EXISTS idx_queue_created ON queue(created_at);
+  `);
+
+	logger.info("Indexes created");
+}
