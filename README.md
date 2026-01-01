@@ -88,29 +88,31 @@ Screencap is a standard Electron “3-layer” app:
 
 High-level flow:
 
-1. **Scheduler** runs every N minutes (`Settings.captureInterval`), skipping if:
-   - screen recording permission is missing
-   - the system has been idle for > 5 minutes (scheduled captures only)
-   - the foreground app is Screencap (scheduled captures only)
-2. **Context capture** (optional):
-   - `ContextService` collects a foreground snapshot and (if supported) URL/content enrichment
-   - `buildContextKey(...)` generates a stable key like `youtube:<id>` or `app:<bundleId>:<window>`
-3. **Screen capture**:
-   - `desktopCapturer` grabs all displays
-   - each display is saved as:
-     - thumbnail (`~400px` wide, WebP)
-     - “original” (`~1280px` wide, WebP)
-     - for the “primary” display only: optional high-res PNG (`*.hq.png`)
-   - captures are fingerprinted (perceptual dHash) for merge decisions
-4. **Event creation & merge**:
+1. **Scheduled capture is windowed (dominant activity)**:
+   - The app continuously polls the foreground app/window.
+   - When the foreground stays stable for ≥ 10s, it takes a **temporary** multi-display capture candidate.
+   - Candidates are keyed by **URL host** for browsers and **bundle id** for other apps.
+   - At the end of each interval, it picks the **dominant** key by time (ignoring < 10s interruptions), keeps only that candidate, and deletes the rest.
+   - If permission is missing, nothing is stored. If the system is idle at the tick, the window is finalized up to the last input time (idle tail discarded). If no candidate exists, nothing is stored.
+2. **Manual capture** is immediate (single capture group).
+3. **Context capture**:
+   - `ContextService` collects a foreground snapshot and (if supported) URL/content enrichment.
+   - `buildContextKey(...)` generates a stable key like `youtube:<id>` or `app:<bundleId>:<window>`.
+4. **Screen capture**:
+   - `desktopCapturer` grabs all displays.
+   - Each display is saved as thumbnail (`~400px` WebP) + “original” (`~1280px` WebP).
+   - For the primary display only: optional high-res PNG (`*.hq.png`).
+   - Captures are fingerprinted (perceptual dHash) for merge decisions.
+5. **Event creation & merge**:
    - New captures are merged into the last event (same display) only if:
      - within a time gap threshold (`interval * 2 + 30s`)
      - **context key** matches
      - fingerprints are “similar” (stable + detail dHash thresholds)
    - Otherwise a new `events` row is created plus `event_screenshots` rows for each display.
-5. **Queue for LLM**:
+   - For windowed scheduled events, the event time range is `windowStart → windowEnd`.
+6. **Queue for LLM**:
    - the **primary display’s** “original” image is enqueued (`queue` table) for classification
-6. **Queue processor** (every 10s):
+7. **Queue processor** (every 10s):
    - dequeues items and calls OpenRouter
    - updates the event with classification fields
    - deletes the high-res PNG if **project progress is not shown** (storage minimization)
@@ -129,7 +131,7 @@ Settings are stored in `settings.json` (under the app’s user data directory) a
 - `apiKey`: OpenRouter API key (stored encrypted with Electron `safeStorage` when available).
 - `captureInterval`: capture interval (minutes). Used by the scheduler.
 - `retentionDays`: retention window (days). Events and screenshots older than this are automatically deleted.
-- `excludedApps`: list of excluded apps. Currently stored, but not enforced yet.
+- `excludedApps`: apps excluded from **scheduled** capture (manual capture bypasses this).
 - `launchAtLogin`: launch at login toggle. Currently stored, but not enforced yet.
 
 ### Environment variables
@@ -147,7 +149,7 @@ The default OpenRouter model is currently hardcoded in `electron/main/features/l
 ## Project status / known gaps
 
 - **Platform support**: currently macOS-focused (AppleScript providers + macOS permission deep-links).
-- **Excluded apps**: `excludedApps` exists in settings/UI, but filtering is not implemented yet.
+- **Excluded apps**: enforced for scheduled captures; manual capture intentionally bypasses.
 - **Launch at login**: `launchAtLogin` exists in settings/UI, but the login item wiring is not implemented yet.
 
 ## Privacy, networking, and data
@@ -183,6 +185,7 @@ All data lives under `app.getPath('userData')` (typically `~/Library/Application
   - `thumbnails/<uuid>.webp`
   - `originals/<uuid>.webp`
   - `originals/<uuid>.hq.png` (only kept for progress events)
+  - `tmp/<windowId>/...` (temporary candidate captures; cleaned automatically)
   - `favicons/<host>.<ext>`
 
 ### Database schema (overview)

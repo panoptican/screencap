@@ -16,6 +16,7 @@ import {
 	finalizeActivityWindow,
 	startActivityWindowTracking,
 	stopActivityWindowTracking,
+	type WindowedCaptureResult,
 } from "../activityWindow";
 import { evaluateAutomationPolicy } from "../automationRules";
 import { captureAllDisplays } from "../capture";
@@ -39,8 +40,35 @@ let captureInterval: NodeJS.Timeout | null = null;
 let currentIntervalMinutes = DEFAULT_INTERVAL_MINUTES;
 let captureLock: Promise<void> | null = null;
 
+type CapturedWindow = Extract<WindowedCaptureResult, { kind: "capture" }>;
+
 function getIntervalMs(): number {
 	return currentIntervalMinutes * 60 * 1000;
+}
+
+async function processCapturedWindow(
+	windowed: CapturedWindow,
+): Promise<CaptureTriggerResult> {
+	const intervalMs = getIntervalMs();
+	const primaryDisplayId =
+		windowed.primaryDisplayId ?? String(screen.getPrimaryDisplay().id);
+
+	const result = await processCaptureGroup({
+		captures: windowed.captures,
+		intervalMs,
+		primaryDisplayId,
+		context: windowed.context,
+	});
+
+	if (!result.merged && result.eventId) {
+		updateEvent(result.eventId, {
+			timestamp: windowed.windowStart,
+			endTimestamp: windowed.windowEnd,
+		});
+		broadcastEventUpdated(result.eventId);
+	}
+
+	return result;
 }
 
 async function runWindowedCaptureCycle(): Promise<CaptureTriggerResult> {
@@ -72,36 +100,24 @@ async function runWindowedCaptureCycle(): Promise<CaptureTriggerResult> {
 		}
 
 		if (idleTime > IDLE_SKIP_SECONDS) {
-			logger.debug(`System idle for ${idleTime}s, skipping scheduled capture`);
+			const idleStartAt = windowEnd - idleTime * 1000;
+			logger.debug(`System idle for ${idleTime}s, finalizing before idle`, {
+				idleStartAt,
+			});
+
+			const windowed = await finalizeActivityWindow(idleStartAt);
 			await discardActivityWindow(windowEnd);
-			return { merged: false, eventId: null };
+			if (windowed.kind !== "capture") {
+				return { merged: false, eventId: null };
+			}
+			return await processCapturedWindow(windowed);
 		}
 
 		const windowed = await finalizeActivityWindow(windowEnd);
 		if (windowed.kind !== "capture") {
 			return { merged: false, eventId: null };
 		}
-
-		const intervalMs = getIntervalMs();
-		const primaryDisplayId =
-			windowed.primaryDisplayId ?? String(screen.getPrimaryDisplay().id);
-
-		const result = await processCaptureGroup({
-			captures: windowed.captures,
-			intervalMs,
-			primaryDisplayId,
-			context: windowed.context,
-		});
-
-		if (!result.merged && result.eventId) {
-			updateEvent(result.eventId, {
-				timestamp: windowed.windowStart,
-				endTimestamp: windowed.windowEnd,
-			});
-			broadcastEventUpdated(result.eventId);
-		}
-
-		return result;
+		return await processCapturedWindow(windowed);
 	} finally {
 		releaseLock();
 		captureLock = null;

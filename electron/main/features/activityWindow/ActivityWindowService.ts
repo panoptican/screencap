@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
 import { basename, join } from "node:path";
-import { screen } from "electron";
+import { powerMonitor, screen } from "electron";
 import { v4 as uuid } from "uuid";
 import { SELF_APP_BUNDLE_ID } from "../../../shared/appIdentity";
 import type { CaptureResult } from "../../../shared/types";
@@ -20,6 +20,8 @@ const POLL_MS = 1_000;
 const BROWSER_HOST_REFRESH_MS = 2_000;
 const MIN_STABLE_MS = 10_000;
 const INTERRUPTION_MAX_MS = 10_000;
+const IDLE_AWAY_SECONDS = 5 * 60;
+const IDLE_BUNDLE_ID = "__idle__";
 
 type Segment = ActivitySegment;
 
@@ -92,6 +94,22 @@ const state: ServiceState = {
 	pollInFlight: null,
 	captureInFlight: null,
 };
+
+let windowLock: Promise<void> | null = null;
+
+async function withWindowLock<T>(fn: () => Promise<T>): Promise<T> {
+	if (windowLock) await windowLock;
+	let release!: () => void;
+	windowLock = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	try {
+		return await fn();
+	} finally {
+		release();
+		windowLock = null;
+	}
+}
 
 function buildKey(
 	displayId: string,
@@ -244,6 +262,7 @@ async function captureCandidate(target: {
 	urlHost: string | null;
 }): Promise<void> {
 	if (state.status !== "running") return;
+	if (powerMonitor.getSystemIdleTime() > IDLE_AWAY_SECONDS) return;
 	if (state.candidates.has(target.key)) return;
 	if (!state.windowThumbnailsDir || !state.windowOriginalsDir) return;
 
@@ -293,48 +312,86 @@ async function captureCandidate(target: {
 }
 
 async function pollOnce(): Promise<void> {
-	if (state.status !== "running") return;
-	const snapshot = await collectForegroundSnapshot();
-	if (state.status !== "running") return;
-	if (!snapshot) return;
+	await withWindowLock(async () => {
+		if (state.status !== "running") return;
+		const idleTimeSeconds = powerMonitor.getSystemIdleTime();
+		const now = Date.now();
 
-	state.lastSnapshot = snapshot;
+		if (idleTimeSeconds > IDLE_AWAY_SECONDS) {
+			const idleStartAt = Math.max(
+				state.windowStart,
+				now - idleTimeSeconds * 1000,
+			);
+			const displayId =
+				state.current?.displayId ??
+				state.lastSnapshot?.window.displayId ??
+				String(screen.getPrimaryDisplay().id);
 
-	const now = snapshot.capturedAt;
-	const displayId = snapshot.window.displayId ?? String(screen.getPrimaryDisplay().id);
-	const bundleId = snapshot.app.bundleId;
-	const urlHost = await resolveUrlHost(snapshot, displayId);
-	const key = buildKey(displayId, bundleId, urlHost);
+			if (state.current?.bundleId !== IDLE_BUNDLE_ID) {
+				closeCurrent(idleStartAt);
+				state.current = {
+					key: buildKey(displayId, IDLE_BUNDLE_ID, null),
+					bundleId: IDLE_BUNDLE_ID,
+					displayId,
+					urlHost: null,
+					startAt: idleStartAt,
+					endAt: null,
+				};
+			}
+			return;
+		}
 
-	if (!state.current) {
-		state.current = {
-			key,
-			bundleId,
-			displayId,
-			urlHost,
-			startAt: Math.max(state.windowStart, now),
-			endAt: null,
-		};
-		return;
-	}
+		if (state.current?.bundleId === IDLE_BUNDLE_ID) {
+			const activeAt = Math.max(
+				state.windowStart,
+				now - idleTimeSeconds * 1000,
+			);
+			closeCurrent(activeAt);
+		}
 
-	if (key !== state.current.key) {
-		closeCurrent(now);
-		state.current = {
-			key,
-			bundleId,
-			displayId,
-			urlHost,
-			startAt: now,
-			endAt: null,
-		};
-	}
+		const snapshot = await collectForegroundSnapshot();
+		if (state.status !== "running") return;
+		if (!snapshot) return;
 
-	if (state.candidates.has(key)) return;
-	if (now - state.current.startAt < MIN_STABLE_MS) return;
-	if (state.captureInFlight) return;
+		state.lastSnapshot = snapshot;
 
-	void captureCandidate({ key, bundleId, displayId, urlHost });
+		const capturedAt = snapshot.capturedAt;
+		const displayId =
+			snapshot.window.displayId ?? String(screen.getPrimaryDisplay().id);
+		const bundleId = snapshot.app.bundleId;
+		const urlHost = await resolveUrlHost(snapshot, displayId);
+		const key = buildKey(displayId, bundleId, urlHost);
+
+		if (!state.current) {
+			state.current = {
+				key,
+				bundleId,
+				displayId,
+				urlHost,
+				startAt: Math.max(state.windowStart, capturedAt),
+				endAt: null,
+			};
+			return;
+		}
+
+		if (key !== state.current.key) {
+			closeCurrent(capturedAt);
+			state.current = {
+				key,
+				bundleId,
+				displayId,
+				urlHost,
+				startAt: capturedAt,
+				endAt: null,
+			};
+		}
+
+		if (state.candidates.has(key)) return;
+		if (capturedAt - state.current.startAt < MIN_STABLE_MS) return;
+		if (state.captureInFlight) return;
+
+		await captureCandidate({ key, bundleId, displayId, urlHost });
+	});
 }
 
 export function startActivityWindowTracking(): void {
@@ -342,7 +399,11 @@ export function startActivityWindowTracking(): void {
 	cleanupTempRoot();
 	state.status = "running";
 	initWindow(Date.now(), null);
-	void pollOnce();
+	state.pollInFlight = pollOnce()
+		.catch(() => {})
+		.finally(() => {
+			state.pollInFlight = null;
+		});
 	state.pollTimer = setInterval(() => {
 		if (state.pollInFlight) return;
 		state.pollInFlight = pollOnce()
@@ -377,6 +438,7 @@ export function stopActivityWindowTracking(): void {
 	state.current = null;
 	state.candidates.clear();
 	state.lastSnapshot = null;
+	state.browserHostCache = null;
 	logger.info("Activity window tracking stopped");
 }
 
@@ -385,87 +447,125 @@ export function isActivityWindowTracking(): boolean {
 }
 
 export async function discardActivityWindow(windowEnd: number): Promise<void> {
-	if (state.captureInFlight) await state.captureInFlight;
-	const continuation = state.lastSnapshot;
-	if (state.windowDir) rmSync(state.windowDir, { recursive: true, force: true });
-	initWindow(windowEnd, continuation);
+	await withWindowLock(async () => {
+		const safeWindowEnd = Math.max(state.windowStart, windowEnd);
+		if (state.captureInFlight) await state.captureInFlight;
+		const continuation = state.lastSnapshot;
+		if (state.windowDir)
+			rmSync(state.windowDir, { recursive: true, force: true });
+		initWindow(safeWindowEnd, continuation);
+	});
 }
 
 export async function finalizeActivityWindow(
 	windowEnd: number,
 ): Promise<WindowedCaptureResult> {
-	const windowStart = state.windowStart;
+	return await withWindowLock(async () => {
+		const windowStart = state.windowStart;
+		const safeWindowEnd = Math.max(windowStart, windowEnd);
 
-	if (state.status !== "running") {
-		return { kind: "skip", windowStart, windowEnd, reason: "not-running" };
-	}
+		if (state.status !== "running") {
+			return {
+				kind: "skip",
+				windowStart,
+				windowEnd: safeWindowEnd,
+				reason: "not-running",
+			};
+		}
 
-	if (state.captureInFlight) await state.captureInFlight;
+		if (state.captureInFlight) await state.captureInFlight;
 
-	const finalized: Segment[] = [...state.segments];
-	if (state.current) finalized.push({ ...state.current, endAt: windowEnd });
+		const finalized: Segment[] = [...state.segments];
+		if (state.current)
+			finalized.push({ ...state.current, endAt: safeWindowEnd });
+		const activeSegments = finalized.filter(
+			(s) => s.bundleId !== IDLE_BUNDLE_ID,
+		);
 
-	const dominant = computeDominantSegment(
-		finalized,
-		windowEnd,
-		INTERRUPTION_MAX_MS,
-	);
+		const dominant = computeDominantSegment(
+			activeSegments,
+			safeWindowEnd,
+			INTERRUPTION_MAX_MS,
+		);
 
-	const continuation = state.lastSnapshot;
-	const currentWindowDir = state.windowDir;
+		const continuation = state.lastSnapshot;
+		const currentWindowDir = state.windowDir;
 
-	if (!dominant) {
-		if (currentWindowDir) rmSync(currentWindowDir, { recursive: true, force: true });
-		initWindow(windowEnd, continuation);
-		return { kind: "skip", windowStart, windowEnd, reason: "no-data" };
-	}
+		if (!dominant) {
+			if (currentWindowDir)
+				rmSync(currentWindowDir, { recursive: true, force: true });
+			initWindow(safeWindowEnd, continuation);
+			return {
+				kind: "skip",
+				windowStart,
+				windowEnd: safeWindowEnd,
+				reason: "no-data",
+			};
+		}
 
-	if (shouldSkipBundleId(dominant.bundleId, dominant.urlHost)) {
-		if (currentWindowDir) rmSync(currentWindowDir, { recursive: true, force: true });
-		initWindow(windowEnd, continuation);
+		if (shouldSkipBundleId(dominant.bundleId, dominant.urlHost)) {
+			if (currentWindowDir)
+				rmSync(currentWindowDir, { recursive: true, force: true });
+			initWindow(safeWindowEnd, continuation);
+			return {
+				kind: "skip",
+				windowStart,
+				windowEnd: safeWindowEnd,
+				reason:
+					dominant.bundleId === SELF_APP_BUNDLE_ID
+						? "self"
+						: getSettings().excludedApps.includes(dominant.bundleId)
+							? "excluded"
+							: "policy-skip",
+			};
+		}
+
+		const candidate = state.candidates.get(dominant.key) ?? null;
+		if (!candidate) {
+			if (currentWindowDir)
+				rmSync(currentWindowDir, { recursive: true, force: true });
+			initWindow(safeWindowEnd, continuation);
+			return {
+				kind: "skip",
+				windowStart,
+				windowEnd: safeWindowEnd,
+				reason: "no-candidate",
+			};
+		}
+
+		let captures: CaptureResult[] = [];
+		try {
+			captures = candidate.captures
+				.map(moveCaptureFilesToPermanent)
+				.map((c) => ({
+					...c,
+					timestamp: safeWindowEnd,
+				}));
+		} catch (error) {
+			logger.debug("Failed to finalize candidate capture", { error });
+			if (currentWindowDir)
+				rmSync(currentWindowDir, { recursive: true, force: true });
+			initWindow(safeWindowEnd, continuation);
+			return {
+				kind: "skip",
+				windowStart,
+				windowEnd: safeWindowEnd,
+				reason: "no-candidate",
+			};
+		}
+
+		if (currentWindowDir)
+			rmSync(currentWindowDir, { recursive: true, force: true });
+		initWindow(safeWindowEnd, continuation);
+
 		return {
-			kind: "skip",
+			kind: "capture",
 			windowStart,
-			windowEnd,
-			reason:
-				dominant.bundleId === SELF_APP_BUNDLE_ID
-					? "self"
-					: getSettings().excludedApps.includes(dominant.bundleId)
-						? "excluded"
-						: "policy-skip",
+			windowEnd: safeWindowEnd,
+			primaryDisplayId: candidate.primaryDisplayId,
+			context: candidate.context,
+			captures,
 		};
-	}
-
-	const candidate = state.candidates.get(dominant.key) ?? null;
-	if (!candidate) {
-		if (currentWindowDir) rmSync(currentWindowDir, { recursive: true, force: true });
-		initWindow(windowEnd, continuation);
-		return { kind: "skip", windowStart, windowEnd, reason: "no-candidate" };
-	}
-
-	let captures: CaptureResult[] = [];
-	try {
-		captures = candidate.captures.map(moveCaptureFilesToPermanent).map((c) => ({
-			...c,
-			timestamp: windowEnd,
-		}));
-	} catch (error) {
-		logger.debug("Failed to finalize candidate capture", { error });
-		if (currentWindowDir) rmSync(currentWindowDir, { recursive: true, force: true });
-		initWindow(windowEnd, continuation);
-		return { kind: "skip", windowStart, windowEnd, reason: "no-candidate" };
-	}
-
-	if (currentWindowDir) rmSync(currentWindowDir, { recursive: true, force: true });
-	initWindow(windowEnd, continuation);
-
-	return {
-		kind: "capture",
-		windowStart,
-		windowEnd,
-		primaryDisplayId: candidate.primaryDisplayId,
-		context: candidate.context,
-		captures,
-	};
+	});
 }
 
