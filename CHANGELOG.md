@@ -1,3 +1,11 @@
+## [1.3.2](https://github.com/yahorbarkouski/screencap/compare/v1.3.1...v1.3.2) (2026-01-02)
+
+
+### Bug Fixes
+
+* addiction tracker fixed ([b860b5f](https://github.com/yahorbarkouski/screencap/commit/b860b5f108fd8cef628808a5941cd011bf9e5334))
+* general ([24b26cd](https://github.com/yahorbarkouski/screencap/commit/24b26cd3730eadc6f7730257f4f615ef7c1cec8f))
+
 ## [1.3.1](https://github.com/yahorbarkouski/screencap/compare/v1.3.0...v1.3.1) (2026-01-02)
 
 
