@@ -38,6 +38,7 @@ export interface Event {
 	status: EventStatus;
 	appBundleId: string | null;
 	appName: string | null;
+	appIconPath: string | null;
 	windowTitle: string | null;
 	urlHost: string | null;
 	urlCanonical: string | null;
@@ -66,7 +67,7 @@ export type LatestEventByDisplayId = Pick<
 	| "contextKey"
 >;
 
-export type MemoryType = "addiction" | "project" | "preference" | "correction";
+export type MemoryType = "addiction" | "project" | "preference";
 
 export interface Memory {
 	id: string;
@@ -107,6 +108,11 @@ export interface OnboardingState {
 	completedAt: number | null;
 }
 
+export interface ShortcutSettings {
+	captureNow: string | null;
+	captureProjectProgress: string | null;
+}
+
 export interface Settings {
 	apiKey: string | null;
 	captureInterval: number;
@@ -115,7 +121,49 @@ export interface Settings {
 	launchAtLogin: boolean;
 	automationRules: AutomationRules;
 	onboarding: OnboardingState;
+	shortcuts: ShortcutSettings;
 	llmEnabled: boolean;
+	allowVisionUploads: boolean;
+	localLlmEnabled: boolean;
+	localLlmBaseUrl: string;
+	localLlmModel: string;
+}
+
+export interface ProjectRepo {
+	id: string;
+	projectKey: string;
+	projectName: string;
+	repoRoot: string;
+	createdAt: number;
+}
+
+export interface RepoWorkSession {
+	id: string;
+	projectRepoId: string;
+	projectKey: string;
+	projectName: string;
+	repoRoot: string;
+	branch: string | null;
+	headSha: string | null;
+	startAt: number;
+	endAt: number;
+	isOpen: boolean;
+	maxInsertions: number;
+	maxDeletions: number;
+	files: string[];
+	updatedAt: number;
+}
+
+export interface GitCommit {
+	projectRepoId: string;
+	repoRoot: string;
+	sha: string;
+	timestamp: number;
+	subject: string;
+	parents: string[];
+	insertions: number;
+	deletions: number;
+	files: string[];
 }
 
 export interface Story {
@@ -169,9 +217,9 @@ export interface EventScreenshot {
 export interface QueueItem {
 	id: string;
 	eventId: string;
-	imageData: string;
 	attempts: number;
 	createdAt: number;
+	nextAttemptAt: number;
 }
 
 export interface GetEventsOptions {
@@ -180,6 +228,8 @@ export interface GetEventsOptions {
 	category?: string;
 	project?: string;
 	projectProgress?: boolean;
+	trackedAddiction?: string;
+	hasTrackedAddiction?: boolean;
 	appBundleId?: string;
 	urlHost?: string;
 	startDate?: number;
@@ -196,6 +246,7 @@ export interface WebsiteEntry {
 export interface RecordedApp {
 	bundleId: string;
 	name: string | null;
+	appIconPath: string | null;
 }
 
 export interface GetTimelineFacetsOptions {
@@ -209,9 +260,48 @@ export interface TimelineFacets {
 	apps: RecordedApp[];
 }
 
+export type ClearableStorageCategory =
+	| "tmp"
+	| "thumbnails"
+	| "appicons"
+	| "favicons"
+	| "other";
+
+export interface StorageUsageEntry {
+	key: string;
+	label: string;
+	path: string;
+	bytes: number;
+	clearable: boolean;
+}
+
+export interface StorageUsageBreakdown {
+	totalBytes: number;
+	entries: StorageUsageEntry[];
+	computedAt: number;
+}
+
 export interface CategoryStats {
 	category: string;
 	count: number;
+}
+
+export interface AddictionStatsItem {
+	name: string;
+	lastIncidentAt: number | null;
+	weekCount: number;
+	prevWeekCount: number;
+	coverOriginalPath: string | null;
+	coverThumbnailPath: string | null;
+}
+
+export interface ProjectStatsItem {
+	name: string;
+	eventCount: number;
+	lastEventAt: number | null;
+	coverOriginalPath: string | null;
+	coverThumbnailPath: string | null;
+	coverProjectProgress: number;
 }
 
 export interface StoryInput {
@@ -236,6 +326,18 @@ export type PeriodType = "daily" | "weekly";
 export interface LLMTestResult {
 	success: boolean;
 	error?: string;
+}
+
+export interface OcrLine {
+	text: string;
+	confidence: number;
+}
+
+export interface OcrResult {
+	text: string;
+	lines: OcrLine[];
+	confidence: number;
+	durationMs: number;
 }
 
 export interface ClassificationTrackedAddiction {

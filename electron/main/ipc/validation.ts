@@ -7,6 +7,14 @@ const zPositiveInt = z.number().int().positive();
 
 export const ipcNoArgs = z.tuple([]);
 
+export const ipcClearStorageCategoryArgs = z.tuple([
+	z.enum(["tmp", "thumbnails", "appicons", "favicons", "other"]),
+]);
+
+export const ipcRevealStorageCategoryArgs = z.tuple([
+	z.string().min(1).max(100),
+]);
+
 export const ipcIdArgs = z.tuple([zLimitedString(256)]);
 
 export const ipcSetPopupHeightArgs = z.tuple([zPositiveInt.max(4000)]);
@@ -14,6 +22,8 @@ export const ipcSetPopupHeightArgs = z.tuple([zPositiveInt.max(4000)]);
 export const ipcCopyImageArgs = z.tuple([zLimitedString(10_000)]);
 
 export const ipcOpenExternalArgs = z.tuple([zLimitedString(2000)]);
+
+export const ipcPickDirectoryArgs = ipcNoArgs;
 
 export const ipcCaptureTriggerArgs = z.union([
 	ipcNoArgs,
@@ -34,6 +44,8 @@ export const ipcGetEventsArgs = z.tuple([
 			category: zLimitedString(200).optional(),
 			project: zLimitedString(200).optional(),
 			projectProgress: z.boolean().optional(),
+			trackedAddiction: zLimitedString(200).optional(),
+			hasTrackedAddiction: z.boolean().optional(),
 			appBundleId: zLimitedString(500).optional(),
 			urlHost: zLimitedString(500).optional(),
 			startDate: z.number().int().optional(),
@@ -75,15 +87,25 @@ export const ipcSetEventCaptionArgs = z.tuple([
 	zLimitedString(5000),
 ]);
 
+export const ipcSubmitProjectProgressCaptureArgs = z.tuple([
+	z
+		.object({
+			id: zLimitedString(256),
+			caption: z.string().max(5000),
+			project: zLimitedString(200).nullable(),
+		})
+		.strict(),
+]);
+
 export const ipcGetMemoriesArgs = z.tuple([
-	z.enum(["addiction", "project", "preference", "correction"]).optional(),
+	z.enum(["addiction", "project", "preference"]).optional(),
 ]);
 
 export const ipcInsertMemoryArgs = z.tuple([
 	z
 		.object({
 			id: zLimitedString(256),
-			type: z.enum(["addiction", "project", "preference", "correction"]),
+			type: z.enum(["addiction", "project", "preference"]),
 			content: zLimitedString(20_000),
 			description: z.string().max(20_000).nullable().optional(),
 			createdAt: zNonNegativeInt,
@@ -103,6 +125,10 @@ export const ipcUpdateMemoryArgs = z.tuple([
 ]);
 
 export const ipcGetStatsArgs = z.tuple([z.number().int(), z.number().int()]);
+
+export const ipcGetStatsBatchArgs = z.tuple([
+	z.array(zLimitedString(200)).max(500),
+]);
 
 export const ipcGetStoriesArgs = z.tuple([zNonEmptyString.max(50).optional()]);
 
@@ -146,6 +172,15 @@ const zOnboardingState = z
 	})
 	.strict();
 
+const zShortcutAccelerator = zLimitedString(200).nullable();
+
+const zShortcutSettings = z
+	.object({
+		captureNow: zShortcutAccelerator,
+		captureProjectProgress: zShortcutAccelerator,
+	})
+	.strict();
+
 export const ipcSetSettingsArgs = z.tuple([
 	z
 		.object({
@@ -156,7 +191,12 @@ export const ipcSetSettingsArgs = z.tuple([
 			launchAtLogin: z.boolean(),
 			automationRules: zAutomationRules,
 			onboarding: zOnboardingState,
+			shortcuts: zShortcutSettings,
 			llmEnabled: z.boolean(),
+			allowVisionUploads: z.boolean(),
+			localLlmEnabled: z.boolean(),
+			localLlmBaseUrl: zLimitedString(2000),
+			localLlmModel: zLimitedString(500),
 		})
 		.strict(),
 ]);
@@ -165,7 +205,11 @@ export const ipcStartSchedulerArgs = z.tuple([
 	zPositiveInt.max(1440).optional(),
 ]);
 
+export const ipcSetShortcutsSuspendedArgs = z.tuple([z.boolean()]);
+
 export const ipcLlmClassifyArgs = z.tuple([zNonEmptyString.max(15_000_000)]);
+
+export const ipcOcrRecognizeArgs = z.tuple([zNonEmptyString.max(15_000_000)]);
 
 export const ipcLlmGenerateStoryArgs = z.tuple([
 	z
@@ -182,4 +226,34 @@ export const ipcLlmGenerateStoryArgs = z.tuple([
 		)
 		.max(5000),
 	z.enum(["daily", "weekly"]),
+]);
+
+export const ipcProjectJournalListReposArgs = z.tuple([zLimitedString(200)]);
+
+export const ipcProjectJournalAttachRepoArgs = z.tuple([
+	zLimitedString(200),
+	zLimitedString(10_000),
+]);
+
+export const ipcProjectJournalDetachRepoArgs = z.tuple([zLimitedString(256)]);
+
+export const ipcProjectJournalGetActivityArgs = z.tuple([
+	z
+		.object({
+			projectName: zLimitedString(200),
+			startAt: z.number().int().nonnegative(),
+			endAt: z.number().int().nonnegative(),
+			limitPerRepo: zPositiveInt.max(5000).optional(),
+		})
+		.strict(),
+]);
+
+export const ipcProjectJournalGenerateSummaryArgs = z.tuple([
+	z
+		.object({
+			projectName: zLimitedString(200),
+			startAt: z.number().int().nonnegative(),
+			endAt: z.number().int().nonnegative(),
+		})
+		.strict(),
 ]);

@@ -10,6 +10,15 @@ export interface ScreenContext {
 	urlHost: string | null;
 	contentKind: string | null;
 	contentTitle: string | null;
+	userCaption: string | null;
+	selectedProject: string | null;
+}
+
+function compactText(value: string | null, maxChars: number): string | null {
+	const normalized = (value ?? "").replace(/\s+/g, " ").trim();
+	if (!normalized) return null;
+	if (normalized.length <= maxChars) return normalized;
+	return `${normalized.slice(0, Math.max(0, maxChars - 1))}…`;
 }
 
 function formatScreenContext(context: ScreenContext | null): string | null {
@@ -23,6 +32,10 @@ function formatScreenContext(context: ScreenContext | null): string | null {
 		parts.push(`Content type: ${context.contentKind.replace(/_/g, " ")}`);
 	if (context.contentTitle)
 		parts.push(`Content title: ${context.contentTitle}`);
+	const selectedProject = compactText(context.selectedProject, 200);
+	if (selectedProject) parts.push(`Selected project: ${selectedProject}`);
+	const userCaption = compactText(context.userCaption, 500);
+	if (userCaption) parts.push(`User caption: ${userCaption}`);
 	return parts.length > 0 ? parts.join("\n") : null;
 }
 
@@ -67,9 +80,6 @@ export function buildSystemPromptStage1(
 	const preferences = memories
 		.filter((m) => m.type === "preference")
 		.map((m) => m.content);
-	const corrections = memories
-		.filter((m) => m.type === "correction")
-		.map((m) => m.content);
 
 	let prompt = `You are an intelligent screen activity classifier.
 
@@ -106,6 +116,7 @@ Rules:
 - If "tracking_enabled" is true, "candidates" MUST be a subset of the provided addiction list (by addiction_id) and only include plausible matches.
 - Be strict: if you cannot point to concrete visual signals, lower likelihood and/or omit the candidate.
 - "project" must be exactly one of the provided project names, or null.
+- If a "Selected project" is provided in CURRENT CONTEXT, you MUST set "project" to that exact value.
 - "project_progress" describes whether this screenshot shows a visual artifact of progress for the selected "project" (something a stakeholder could see: the project's UI, design mockups, prototypes, a running app, a website/staging page).
 - Do NOT require novelty. You cannot know what is "new" from a single screenshot. If it is the project's UI/prototype/design, it counts as progress evidence.
 - If "project" is null, "project_progress" MUST be {"shown": false, "confidence": 0}.
@@ -140,11 +151,88 @@ Categories:
 		prompt += `\n\nUSER PREFERENCES:\n${preferences.map((p) => `- ${p}`).join("\n")}`;
 	}
 
-	if (corrections.length > 0) {
-		prompt += `\n\nPREVIOUS CORRECTIONS:\n${corrections
-			.slice(0, 10)
-			.map((c) => `- ${c}`)
-			.join("\n")}`;
+	return prompt;
+}
+
+export function buildSystemPromptStage1TextOnly(
+	memories: Memory[],
+	addictions: AddictionOption[],
+	context: ScreenContext | null,
+): string {
+	const projects = memories
+		.filter((m) => m.type === "project")
+		.map((m) => m.content);
+	const preferences = memories
+		.filter((m) => m.type === "preference")
+		.map((m) => m.content);
+
+	let prompt = `You are an intelligent screen activity classifier.
+You do NOT see screenshot pixels. You only see structured context metadata and optional OCR text.
+
+Return ONLY valid JSON matching this schema:
+{
+  "category": "Study" | "Work" | "Leisure" | "Chores" | "Social" | "Unknown",
+  "subcategories": string[],
+  "project": string | null,
+  "project_progress": {
+    "shown": boolean,
+    "confidence": number
+  },
+  "tags": string[],
+  "confidence": number,
+  "caption": string,
+  "addiction_triage": {
+    "tracking_enabled": boolean,
+    "potentially_addictive": boolean,
+    "candidates": Array<{
+      "addiction_id": string,
+      "likelihood": number,
+      "evidence": string[],
+      "rationale": string
+    }>
+  }
+}
+
+Rules:
+- "caption" must be a concise, descriptive title (3-8 words) describing the specific activity. Use context and OCR text to be specific.
+- Be conservative when metadata is ambiguous. If unsure, use category "Unknown" and confidence <= 0.4.
+- "potentially_addictive" is true if context or OCR indicates commonly addictive content (games, social feeds, short-form video, gambling, porn, doomscrolling).
+- "tracking_enabled" must be true when TRACKED ADDICTIONS is not "none" and the activity is not a meta/review screen. It must be false otherwise.
+- If the activity is from ${SELF_APP_NAME} (${SELF_APP_BUNDLE_ID}), it is a meta/review screen and "tracking_enabled" MUST be false.
+- If "tracking_enabled" is false, "candidates" MUST be [].
+- If "tracking_enabled" is true, "candidates" MUST be a subset of the provided addiction list (by addiction_id) and only include plausible matches.
+- "evidence" must cite concrete phrases from OCR text and/or specific context fields.
+- "project" must be exactly one of the provided project names, or null.
+- If a "Selected project" is provided in CURRENT CONTEXT, you MUST set "project" to that exact value.
+- "project_progress" describes whether this activity shows a stakeholder-visible artifact for the selected "project". In text-only mode, infer from app/site and titles (e.g., Figma designs, a running app page, staging site) and be conservative.
+- If "project" is null, "project_progress" MUST be {"shown": false, "confidence": 0}.
+- If "project_progress.shown" is false, "project_progress.confidence" MUST be 0.
+
+Categories:
+- Study: Learning, courses, reading educational content, research
+- Work: Professional tasks, coding, emails, documents, meetings
+- Leisure: Entertainment, games, social media scrolling, videos
+- Chores: Personal admin, bills, shopping, scheduling
+- Social: Communication, messaging, calls
+- Unknown: Cannot determine`;
+
+	if (context) {
+		const formatted = formatScreenContext(context);
+		if (formatted) prompt += `\n\nCURRENT CONTEXT:\n${formatted}`;
+	}
+
+	if (addictions.length > 0) {
+		prompt += `\n\nTRACKED ADDICTIONS (id -> definition):\n${addictions.map(formatAddictionListItem).join("\n")}`;
+	} else {
+		prompt += `\n\nTRACKED ADDICTIONS: none`;
+	}
+
+	if (projects.length > 0) {
+		prompt += `\n\nUSER'S ACTIVE PROJECTS:\n${projects.map((p) => `- ${p}`).join("\n")}`;
+	}
+
+	if (preferences.length > 0) {
+		prompt += `\n\nUSER PREFERENCES:\n${preferences.map((p) => `- ${p}`).join("\n")}`;
 	}
 
 	return prompt;

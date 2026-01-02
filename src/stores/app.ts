@@ -5,6 +5,7 @@ import type {
 	EventFilters,
 	Memory,
 	Settings,
+	SettingsTab,
 	Story,
 	View,
 } from "@/types";
@@ -34,6 +35,15 @@ function areEventFiltersEqual(a: EventFilters, b: EventFilters): boolean {
 interface AppState {
 	view: View;
 	setView: (view: View) => void;
+
+	settingsTab: SettingsTab;
+	setSettingsTab: (tab: SettingsTab) => void;
+
+	selectedProjectId: string | null;
+	setSelectedProjectId: (id: string | null) => void;
+
+	focusedAddictionId: string | null;
+	setFocusedAddictionId: (id: string | null) => void;
 
 	filters: EventFilters;
 	setFilters: (filters: EventFilters) => void;
@@ -83,6 +93,26 @@ interface AppState {
 export const useAppStore = create<AppState>((set, _get) => ({
 	view: "timeline",
 	setView: (view) => set((state) => (state.view === view ? {} : { view })),
+
+	settingsTab: "capture",
+	setSettingsTab: (settingsTab) =>
+		set((state) => (state.settingsTab === settingsTab ? {} : { settingsTab })),
+
+	selectedProjectId: null,
+	setSelectedProjectId: (selectedProjectId) =>
+		set((state) =>
+			state.selectedProjectId === selectedProjectId
+				? {}
+				: { selectedProjectId },
+		),
+
+	focusedAddictionId: null,
+	setFocusedAddictionId: (focusedAddictionId) =>
+		set((state) =>
+			state.focusedAddictionId === focusedAddictionId
+				? {}
+				: { focusedAddictionId },
+		),
 
 	filters: getTodayFilters(),
 	setFilters: (filters) =>
@@ -194,7 +224,15 @@ export const useAppStore = create<AppState>((set, _get) => ({
 		launchAtLogin: false,
 		automationRules: { apps: {}, hosts: {} },
 		onboarding: { version: 1, completedAt: null },
+		shortcuts: {
+			captureNow: "Command+Shift+O",
+			captureProjectProgress: "Command+Shift+P",
+		},
 		llmEnabled: true,
+		allowVisionUploads: false,
+		localLlmEnabled: false,
+		localLlmBaseUrl: "http://localhost:11434/v1",
+		localLlmModel: "llama3.2",
 	},
 	setSettings: (settings) => set({ settings }),
 	settingsLoaded: false,

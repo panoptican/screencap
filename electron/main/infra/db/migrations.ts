@@ -26,6 +26,51 @@ function addColumnIfMissing(
 	return true;
 }
 
+function migrateQueue(db: Database.Database): void {
+	const queueColumns = getExistingColumns(db, "queue");
+	if (queueColumns.size === 0) return;
+
+	const hasImageData = queueColumns.has("image_data");
+	if (hasImageData) {
+		db.transaction(() => {
+			db.exec("DROP TABLE IF EXISTS queue_v2");
+			db.exec(`
+        CREATE TABLE queue_v2 (
+          id TEXT PRIMARY KEY,
+          event_id TEXT NOT NULL,
+          attempts INTEGER DEFAULT 0,
+          created_at INTEGER NOT NULL,
+          next_attempt_at INTEGER NOT NULL,
+          FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
+        );
+      `);
+			db.exec(`
+        INSERT INTO queue_v2 (id, event_id, attempts, created_at, next_attempt_at)
+        SELECT id, event_id, attempts, created_at, created_at
+        FROM queue;
+      `);
+			db.exec("DROP TABLE queue");
+			db.exec("ALTER TABLE queue_v2 RENAME TO queue");
+		})();
+		logger.info("Migrated queue table to drop image_data");
+		return;
+	}
+
+	const changed = addColumnIfMissing(
+		db,
+		"queue",
+		"next_attempt_at",
+		"INTEGER NOT NULL DEFAULT 0",
+		queueColumns,
+	);
+
+	if (changed) {
+		db.exec(
+			"UPDATE queue SET next_attempt_at = created_at WHERE next_attempt_at = 0",
+		);
+	}
+}
+
 export function runMigrations(db: Database.Database): void {
 	logger.info("Running migrations");
 
@@ -133,6 +178,8 @@ export function runMigrations(db: Database.Database): void {
 
 	const memoryColumns = getExistingColumns(db, "memory");
 	addColumnIfMissing(db, "memory", "description", "TEXT", memoryColumns);
+
+	migrateQueue(db);
 
 	logger.info("Migrations complete");
 }

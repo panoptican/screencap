@@ -5,7 +5,7 @@ import { setTrustedWebContentsIds } from "../ipc/secure";
 
 let mainWindow: BrowserWindow | null = null;
 
-function setMacActivationMode(mode: "foreground" | "background"): void {
+export function setMacActivationMode(mode: "foreground" | "background"): void {
 	if (process.platform !== "darwin") return;
 
 	if (mode === "foreground") {
@@ -61,7 +61,14 @@ function openExternalUrl(url: string): void {
 	}
 }
 
-export function createWindow(): BrowserWindow {
+export function createWindow(options?: {
+	startHidden?: boolean;
+}): BrowserWindow {
+	const startHidden = options?.startHidden ?? false;
+	if (startHidden) {
+		setMacActivationMode("background");
+	}
+
 	mainWindow = new BrowserWindow({
 		width: 1200,
 		height: 800,
@@ -106,6 +113,10 @@ export function createWindow(): BrowserWindow {
 	);
 
 	mainWindow.on("ready-to-show", () => {
+		if (startHidden) {
+			setMacActivationMode("background");
+			return;
+		}
 		mainWindow?.show();
 	});
 

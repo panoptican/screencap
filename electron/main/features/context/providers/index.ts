@@ -4,6 +4,7 @@ export {
 	getChromiumAutomationState,
 	getSupportedBrowserBundleIds,
 } from "./ChromiumProvider";
+export { cursorProvider } from "./CursorProvider";
 export { getContextProviders, registerProvider } from "./registry";
 export {
 	getSafariAutomationError,

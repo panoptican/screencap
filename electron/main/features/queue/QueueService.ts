@@ -1,12 +1,14 @@
-import { existsSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { isSelfApp } from "../../../shared/appIdentity";
 import type { Event } from "../../../shared/types";
 import {
 	getEventById,
+	getLatestCompletedEventByFingerprint,
 	updateEvent,
 } from "../../infra/db/repositories/EventRepository";
 import {
+	getDueQueueItems,
 	getQueueItems,
 	incrementAttempts,
 	MAX_ATTEMPTS,
@@ -14,13 +16,24 @@ import {
 } from "../../infra/db/repositories/QueueRepository";
 import { createLogger } from "../../infra/log";
 import { getOriginalsDir } from "../../infra/paths";
-import { getApiKey, getSettings } from "../../infra/settings";
+import { getSettings } from "../../infra/settings";
 import { broadcastEventUpdated } from "../../infra/windows";
+import {
+	type ClassificationProviderContext,
+	createAiRouter,
+	localOpenAiProvider,
+	openRouterTextProvider,
+	openRouterVisionProvider,
+} from "../ai";
 import {
 	evaluateAutomationPolicy,
 	type PolicyResult,
 } from "../automationRules";
-import { classifyScreenshot, type ScreenContext } from "../llm";
+import type { ScreenContext } from "../llm";
+import {
+	recognizeTextFromImagePath,
+	recognizeTextFromWebpBase64,
+} from "../ocr";
 import { canonicalizeProject } from "../projects";
 
 const logger = createLogger({ scope: "QueueService" });
@@ -31,6 +44,45 @@ const ITEM_DELAY_MS = 1000;
 let processingInterval: NodeJS.Timeout | null = null;
 let isProcessing = false;
 
+const aiRouter = createAiRouter([
+	localOpenAiProvider,
+	openRouterTextProvider,
+	openRouterVisionProvider,
+]);
+
+function buildProviderContext(
+	settings: ReturnType<typeof getSettings>,
+): ClassificationProviderContext {
+	const localBaseUrl = settings.localLlmEnabled
+		? settings.localLlmBaseUrl.trim() || null
+		: null;
+	const localModel = settings.localLlmEnabled
+		? settings.localLlmModel.trim() || null
+		: null;
+
+	return {
+		mode: settings.llmEnabled ? "hybrid" : "off",
+		apiKey: settings.apiKey,
+		allowVisionUploads: settings.allowVisionUploads,
+		localBaseUrl,
+		localModel,
+	};
+}
+
+function buildProviderOrder(ctx: ClassificationProviderContext): string[] {
+	const order: string[] = [];
+	order.push("local.retrieval");
+	if (ctx.localBaseUrl && ctx.localModel) {
+		order.push(localOpenAiProvider.id);
+	}
+	if (ctx.apiKey) {
+		order.push(openRouterTextProvider.id);
+		if (ctx.allowVisionUploads) order.push(openRouterVisionProvider.id);
+	}
+	order.push("local.baseline");
+	return order;
+}
+
 function extractScreenContext(event: {
 	appBundleId: string | null;
 	appName: string | null;
@@ -38,6 +90,8 @@ function extractScreenContext(event: {
 	urlHost: string | null;
 	contentKind: string | null;
 	contentTitle: string | null;
+	userCaption: string | null;
+	selectedProject: string | null;
 }): ScreenContext | null {
 	if (
 		!event.appBundleId &&
@@ -45,7 +99,9 @@ function extractScreenContext(event: {
 		!event.windowTitle &&
 		!event.urlHost &&
 		!event.contentKind &&
-		!event.contentTitle
+		!event.contentTitle &&
+		!event.userCaption &&
+		!event.selectedProject
 	) {
 		return null;
 	}
@@ -56,6 +112,8 @@ function extractScreenContext(event: {
 		urlHost: event.urlHost,
 		contentKind: event.contentKind,
 		contentTitle: event.contentTitle,
+		userCaption: event.userCaption,
+		selectedProject: event.selectedProject,
 	};
 }
 
@@ -87,9 +145,11 @@ function buildFallbackCaption(event: Event): string {
 }
 
 function finalizeEventLocally(event: Event, policy: PolicyResult): void {
+	const hasManualCaption = (event.caption ?? "").trim().length > 0;
+	const forcedProject = canonicalizeProject(event.project);
 	const updates: Partial<Event> = {
 		status: "completed",
-		caption: buildFallbackCaption(event),
+		caption: hasManualCaption ? event.caption : buildFallbackCaption(event),
 	};
 
 	if (policy.overrides.category) {
@@ -99,18 +159,20 @@ function finalizeEventLocally(event: Event, policy: PolicyResult): void {
 		updates.tags = JSON.stringify(policy.overrides.tags);
 	}
 
-	switch (policy.overrides.projectMode) {
-		case "skip":
-			updates.project = null;
-			updates.projectProgress = 0;
-			updates.projectProgressConfidence = null;
-			updates.projectProgressEvidence = null;
-			break;
-		case "force":
-			if (policy.overrides.project) {
-				updates.project = policy.overrides.project;
-			}
-			break;
+	if (!forcedProject) {
+		switch (policy.overrides.projectMode) {
+			case "skip":
+				updates.project = null;
+				updates.projectProgress = 0;
+				updates.projectProgressConfidence = null;
+				updates.projectProgressEvidence = null;
+				break;
+			case "force":
+				if (policy.overrides.project) {
+					updates.project = policy.overrides.project;
+				}
+				break;
+		}
 	}
 
 	updateEvent(event.id, updates);
@@ -119,7 +181,6 @@ function finalizeEventLocally(event: Event, policy: PolicyResult): void {
 async function processQueueItem(item: {
 	id: string;
 	eventId: string;
-	imageData: string;
 }): Promise<void> {
 	const attempts = incrementAttempts(item.id);
 
@@ -153,13 +214,166 @@ async function processQueueItem(item: {
 			return;
 		}
 
-		const context = extractScreenContext(event);
-		const result = await classifyScreenshot(item.imageData, context);
+		if (event.stableHash && event.contextKey) {
+			const cached = getLatestCompletedEventByFingerprint({
+				stableHash: event.stableHash,
+				contextKey: event.contextKey,
+				excludeId: event.id,
+			});
 
-		if (result) {
+			if (cached) {
+				const latest = getEventById(item.eventId);
+				const hasManualCaption = (latest?.caption ?? "").trim().length > 0;
+				const isManualProgress = latest?.projectProgressEvidence === "manual";
+				const forcedProject = canonicalizeProject(latest?.project ?? null);
+
+				let category = cached.category ?? "Unknown";
+				let tagsJson = cached.tags ?? JSON.stringify([]);
+				const subcategoriesJson = cached.subcategories ?? JSON.stringify([]);
+
+				let project = forcedProject ?? cached.project;
+				let resolvedProgress = isManualProgress
+					? 1
+					: cached.projectProgress === 1
+						? 1
+						: 0;
+				let resolvedEvidence: string | null = isManualProgress
+					? "manual"
+					: (cached.projectProgressEvidence ?? null);
+
+				const resolvedCaption = hasManualCaption
+					? (latest?.caption ?? null)
+					: (cached.caption ?? buildFallbackCaption(event));
+
+				if (policy.overrides.category) {
+					category = policy.overrides.category;
+				}
+				if (policy.overrides.tags) {
+					tagsJson = JSON.stringify(policy.overrides.tags);
+				}
+
+				if (!forcedProject) {
+					switch (policy.overrides.projectMode) {
+						case "skip":
+							project = null;
+							resolvedProgress = 0;
+							resolvedEvidence = null;
+							break;
+						case "force":
+							if (policy.overrides.project) {
+								project = canonicalizeProject(policy.overrides.project);
+							}
+							break;
+					}
+				}
+
+				const shouldDisableAddictionTracking = isSelfApp({
+					bundleId: latest?.appBundleId ?? event.appBundleId,
+					name: latest?.appName ?? event.appName,
+					windowTitle: latest?.windowTitle ?? event.windowTitle,
+				});
+
+				updateEvent(item.eventId, {
+					category,
+					subcategories: subcategoriesJson,
+					project: canonicalizeProject(project),
+					projectProgress: resolvedProgress,
+					projectProgressConfidence:
+						resolvedProgress === 1
+							? (cached.projectProgressConfidence ?? null)
+							: null,
+					projectProgressEvidence: resolvedEvidence,
+					tags: tagsJson,
+					confidence: cached.confidence ?? null,
+					caption: resolvedCaption,
+					trackedAddiction: shouldDisableAddictionTracking
+						? null
+						: (cached.trackedAddiction ?? null),
+					addictionCandidate: shouldDisableAddictionTracking
+						? null
+						: (cached.addictionCandidate ?? null),
+					addictionConfidence: shouldDisableAddictionTracking
+						? null
+						: (cached.addictionConfidence ?? null),
+					addictionPrompt: shouldDisableAddictionTracking
+						? null
+						: (cached.addictionPrompt ?? null),
+					status: "completed",
+				});
+
+				if (resolvedProgress !== 1) {
+					deleteHighResIfExists(item.eventId);
+				}
+
+				removeFromQueue(item.id);
+				broadcastEventUpdated(item.eventId);
+				logger.debug("Applied cached classification", {
+					eventId: item.eventId,
+					sourceEventId: cached.id,
+				});
+				return;
+			}
+		}
+
+		const userCaption = (event.caption ?? "").trim();
+		const context = extractScreenContext({
+			appBundleId: event.appBundleId,
+			appName: event.appName,
+			windowTitle: event.windowTitle,
+			urlHost: event.urlHost,
+			contentKind: event.contentKind,
+			contentTitle: event.contentTitle,
+			userCaption: userCaption.length > 0 ? userCaption.slice(0, 500) : null,
+			selectedProject: event.project,
+		});
+		const aiCtx = buildProviderContext(settings);
+		let imageBase64: string | null = null;
+		try {
+			if (event.originalPath && existsSync(event.originalPath)) {
+				imageBase64 = readFileSync(event.originalPath).toString("base64");
+			}
+		} catch (error) {
+			logger.warn("Failed to read screenshot file for queue item", {
+				eventId: item.eventId,
+				error: String(error),
+			});
+		}
+		if (!imageBase64) {
+			updateEvent(item.eventId, { status: "failed" });
+			deleteHighResIfExists(item.eventId);
+			removeFromQueue(item.id);
+			broadcastEventUpdated(item.eventId);
+			logger.warn("Missing screenshot file for queue item, marking failed", {
+				eventId: item.eventId,
+			});
+			return;
+		}
+		let ocrText: string | null = null;
+		try {
+			const highResPath = highResPathForEventId(item.eventId);
+			if (existsSync(highResPath)) {
+				ocrText = (await recognizeTextFromImagePath(highResPath)).text;
+			} else {
+				ocrText = (await recognizeTextFromWebpBase64(imageBase64)).text;
+			}
+		} catch (error) {
+			logger.warn("OCR failed, continuing without OCR", {
+				eventId: item.eventId,
+				error: String(error),
+			});
+		}
+		const decision = await aiRouter.classify(
+			{ imageBase64, context, ocrText },
+			aiCtx,
+			buildProviderOrder(aiCtx),
+		);
+
+		if (decision.ok) {
+			const result = decision.result;
 			const latest = getEventById(item.eventId);
 			const hasManualCaption = (latest?.caption ?? "").trim().length > 0;
 			const isManualProgress = latest?.projectProgressEvidence === "manual";
+			const forcedProject = canonicalizeProject(latest?.project ?? null);
 			const shouldDisableAddictionTracking = isSelfApp({
 				bundleId: latest?.appBundleId ?? event.appBundleId,
 				name: latest?.appName ?? event.appName,
@@ -174,7 +388,7 @@ async function processQueueItem(item: {
 				});
 			}
 
-			let project = canonicalizeProject(result.project);
+			let project = forcedProject ?? canonicalizeProject(result.project);
 			let progressShown = !!project && result.project_progress.shown;
 			let resolvedProgress = isManualProgress ? 1 : progressShown ? 1 : 0;
 			let resolvedEvidence: string | null = isManualProgress
@@ -196,18 +410,20 @@ async function processQueueItem(item: {
 				tags = policy.overrides.tags;
 			}
 
-			switch (policy.overrides.projectMode) {
-				case "skip":
-					project = null;
-					progressShown = false;
-					resolvedProgress = 0;
-					resolvedEvidence = null;
-					break;
-				case "force":
-					if (policy.overrides.project) {
-						project = canonicalizeProject(policy.overrides.project);
-					}
-					break;
+			if (!forcedProject) {
+				switch (policy.overrides.projectMode) {
+					case "skip":
+						project = null;
+						progressShown = false;
+						resolvedProgress = 0;
+						resolvedEvidence = null;
+						break;
+					case "force":
+						if (policy.overrides.project) {
+							project = canonicalizeProject(policy.overrides.project);
+						}
+						break;
+				}
 			}
 
 			updateEvent(item.eventId, {
@@ -246,6 +462,10 @@ async function processQueueItem(item: {
 			removeFromQueue(item.id);
 			broadcastEventUpdated(item.eventId);
 			logger.debug("Processed queue item", { eventId: item.eventId });
+		} else {
+			throw new Error(
+				`All providers failed: ${decision.attempts.map((a) => `${a.providerId}:${a.error ?? "ok"}`).join(",")}`,
+			);
 		}
 	} catch (error) {
 		logger.error(`Failed to process queue item ${item.id}:`, error);
@@ -276,15 +496,10 @@ async function processQueue(): Promise<void> {
 		return;
 	}
 
-	if (!getApiKey()) {
-		logger.debug("No API key configured, skipping queue processing");
-		return;
-	}
-
 	isProcessing = true;
 
 	try {
-		const items = getQueueItems();
+		const items = getDueQueueItems();
 
 		for (const item of items) {
 			await processQueueItem(item);

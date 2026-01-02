@@ -1,5 +1,5 @@
-import { Copy } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Copy, Expand, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { EventPreview } from "@/components/timeline/EventPreview";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -32,10 +32,12 @@ export function ProgressCard({
 	event,
 	showProject = false,
 	isLast = false,
+	onUnmark,
 }: {
 	event: Event;
 	showProject?: boolean;
 	isLast?: boolean;
+	onUnmark?: () => void;
 }) {
 	const [open, setOpen] = useState(false);
 	const timeLabel = useMemo(() => formatTimeLabel(event), [event]);
@@ -61,6 +63,20 @@ export function ProgressCard({
 		[event.thumbnailPath, highResPath, lowResPath],
 	);
 
+	const handleUnmark = useCallback(
+		async (e: React.MouseEvent) => {
+			e.stopPropagation();
+			await window.api.storage.unmarkProjectProgress(event.id);
+			onUnmark?.();
+		},
+		[event.id, onUnmark],
+	);
+
+	const handleExpand = useCallback((e: React.MouseEvent) => {
+		e.stopPropagation();
+		setOpen(true);
+	}, []);
+
 	return (
 		<>
 			<div className="grid grid-cols-[96px,1fr] gap-4">
@@ -76,11 +92,10 @@ export function ProgressCard({
 
 				<ContextMenu>
 					<ContextMenuTrigger asChild>
-						<button
-							type="button"
+						<div
 							onClick={() => setOpen(true)}
 							className={cn(
-								"group relative overflow-hidden rounded-xl border border-border bg-card text-left",
+								"group relative overflow-hidden rounded-xl border border-border bg-card text-left cursor-pointer",
 								"hover:border-primary/40 transition-colors",
 							)}
 						>
@@ -107,6 +122,23 @@ export function ProgressCard({
 									</div>
 								)}
 
+								<div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+									<button
+										type="button"
+										onClick={handleExpand}
+										className="p-1.5 rounded-md bg-black/60 hover:bg-black/80 text-white/90 hover:text-white transition-colors"
+									>
+										<Expand className="h-4 w-4" />
+									</button>
+									<button
+										type="button"
+										onClick={handleUnmark}
+										className="p-1.5 rounded-md bg-black/60 hover:bg-destructive text-white/90 hover:text-white transition-colors"
+									>
+										<Trash2 className="h-4 w-4" />
+									</button>
+								</div>
+
 								{(event.caption || showProject) && (
 									<div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent p-4">
 										<div className="flex items-end justify-between gap-3">
@@ -132,7 +164,7 @@ export function ProgressCard({
 									</div>
 								)}
 							</div>
-						</button>
+						</div>
 					</ContextMenuTrigger>
 					<ContextMenuContent>
 						<ContextMenuItem onSelect={handleCopyImage}>

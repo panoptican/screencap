@@ -16,21 +16,39 @@ const POPUP_MARGIN = 8;
 
 let popupHeight = POPUP_DEFAULT_HEIGHT;
 let lastAnchor: Rectangle | undefined;
+let userMoved = false;
+let userPosition: { x: number; y: number } | null = null;
+let isProgrammaticMove = false;
 
 function clamp(value: number, min: number, max: number): number {
 	return Math.min(Math.max(value, min), max);
 }
 
+function displayForPopup(anchor?: Rectangle) {
+	if (anchor) {
+		return screen.getDisplayNearestPoint({ x: anchor.x, y: anchor.y });
+	}
+	if (userMoved && userPosition) {
+		return screen.getDisplayNearestPoint(userPosition);
+	}
+	return screen.getPrimaryDisplay();
+}
+
 function computePopupPosition(anchor?: Rectangle): { x: number; y: number } {
-	const display = anchor
-		? screen.getDisplayNearestPoint({ x: anchor.x, y: anchor.y })
-		: screen.getPrimaryDisplay();
+	const display = displayForPopup(anchor);
 
 	const { x: wx, y: wy, width: ww, height: wh } = display.workArea;
 	const minX = wx + POPUP_MARGIN;
 	const maxX = wx + ww - POPUP_WIDTH - POPUP_MARGIN;
 	const minY = wy + POPUP_MARGIN;
 	const maxY = wy + wh - popupHeight - POPUP_MARGIN;
+
+	if (userMoved && userPosition) {
+		return {
+			x: clamp(userPosition.x, minX, maxX),
+			y: clamp(userPosition.y, minY, maxY),
+		};
+	}
 
 	if (!anchor) {
 		return { x: maxX, y: minY };
@@ -45,14 +63,24 @@ function computePopupPosition(anchor?: Rectangle): { x: number; y: number } {
 	};
 }
 
+function setPopupBounds(bounds: Rectangle): void {
+	if (!popupWindow || popupWindow.isDestroyed()) return;
+	isProgrammaticMove = true;
+	try {
+		popupWindow.setBounds(bounds, false);
+	} finally {
+		isProgrammaticMove = false;
+	}
+}
+
 function positionPopupWindow(anchor?: Rectangle): void {
 	if (!popupWindow || popupWindow.isDestroyed()) return;
 	const { x, y } = computePopupPosition(anchor);
-	popupWindow.setBounds(
-		{ x, y, width: POPUP_WIDTH, height: popupHeight },
-		false,
-	);
+	setPopupBounds({ x, y, width: POPUP_WIDTH, height: popupHeight });
 }
+
+let isPopupReady = false;
+let pendingShow: { anchor?: Rectangle } | null = null;
 
 export function createPopupWindow(anchor?: Rectangle): BrowserWindow {
 	if (popupWindow && !popupWindow.isDestroyed()) {
@@ -60,6 +88,9 @@ export function createPopupWindow(anchor?: Rectangle): BrowserWindow {
 	}
 
 	lastAnchor = anchor;
+	userMoved = false;
+	userPosition = null;
+	isPopupReady = false;
 	const { x, y } = computePopupPosition(anchor);
 
 	popupWindow = new BrowserWindow({
@@ -71,7 +102,7 @@ export function createPopupWindow(anchor?: Rectangle): BrowserWindow {
 		acceptFirstMouse: true,
 		frame: false,
 		resizable: false,
-		movable: false,
+		movable: true,
 		minimizable: false,
 		maximizable: false,
 		closable: true,
@@ -97,6 +128,14 @@ export function createPopupWindow(anchor?: Rectangle): BrowserWindow {
 	const webContentsId = popupWindow.webContents.id;
 	addTrustedWebContentsId(webContentsId);
 
+	popupWindow.on("move", () => {
+		if (!popupWindow || popupWindow.isDestroyed()) return;
+		if (isProgrammaticMove) return;
+		const bounds = popupWindow.getBounds();
+		userMoved = true;
+		userPosition = { x: bounds.x, y: bounds.y };
+	});
+
 	popupWindow.on("blur", () => {
 		setTimeout(() => {
 			if (!popupWindow || popupWindow.isDestroyed()) return;
@@ -108,6 +147,23 @@ export function createPopupWindow(anchor?: Rectangle): BrowserWindow {
 	popupWindow.on("closed", () => {
 		removeTrustedWebContentsId(webContentsId);
 		popupWindow = null;
+		userMoved = false;
+		userPosition = null;
+		isProgrammaticMove = false;
+		isPopupReady = false;
+	});
+
+	popupWindow.once("ready-to-show", () => {
+		isPopupReady = true;
+		if (pendingShow) {
+			const anchor = pendingShow.anchor;
+			pendingShow = null;
+			positionPopupWindow(anchor);
+			if (popupWindow && !popupWindow.isDestroyed()) {
+				popupWindow.show();
+				popupWindow.focus();
+			}
+		}
 	});
 
 	const url = process.env.ELECTRON_RENDERER_URL
@@ -120,13 +176,27 @@ export function createPopupWindow(anchor?: Rectangle): BrowserWindow {
 	return popupWindow;
 }
 
+export function getPopupWindow(): BrowserWindow | null {
+	return popupWindow;
+}
+
+export function initPopupWindow(): void {
+	if (popupWindow && !popupWindow.isDestroyed()) return;
+	createPopupWindow();
+}
+
 export function showPopupWindow(anchor?: Rectangle): void {
 	lastAnchor = anchor;
 	if (!popupWindow || popupWindow.isDestroyed()) {
+		pendingShow = { anchor };
 		createPopupWindow(anchor);
+		return;
+	}
+	if (!isPopupReady) {
+		pendingShow = { anchor };
+		return;
 	}
 	positionPopupWindow(anchor);
-	if (!popupWindow || popupWindow.isDestroyed()) return;
 	popupWindow.show();
 	popupWindow.focus();
 }
@@ -139,24 +209,24 @@ export function hidePopupWindow(): void {
 export function togglePopupWindow(anchor?: Rectangle): void {
 	lastAnchor = anchor;
 	if (!popupWindow || popupWindow.isDestroyed()) {
+		pendingShow = { anchor };
 		createPopupWindow(anchor);
-		positionPopupWindow(anchor);
-		if (!popupWindow || popupWindow.isDestroyed()) return;
-		popupWindow.show();
-		popupWindow.focus();
 		return;
 	}
 
-	if (popupWindow.isDestroyed()) return;
-
 	if (popupWindow.isVisible()) {
 		popupWindow.hide();
-	} else {
-		positionPopupWindow(anchor);
-		if (popupWindow.isDestroyed()) return;
-		popupWindow.show();
-		popupWindow.focus();
+		return;
 	}
+
+	if (!isPopupReady) {
+		pendingShow = { anchor };
+		return;
+	}
+
+	positionPopupWindow(anchor);
+	popupWindow.show();
+	popupWindow.focus();
 }
 
 export function destroyPopupWindow(): void {
@@ -171,9 +241,7 @@ export function destroyPopupWindow(): void {
 export function setPopupHeight(height: number): void {
 	if (!popupWindow || popupWindow.isDestroyed()) return;
 	const anchor = lastAnchor;
-	const display = anchor
-		? screen.getDisplayNearestPoint({ x: anchor.x, y: anchor.y })
-		: screen.getPrimaryDisplay();
+	const display = displayForPopup(anchor);
 	const maxByDisplay = Math.max(0, display.workArea.height - POPUP_MARGIN * 2);
 	const safeMax = Math.min(POPUP_MAX_HEIGHT, maxByDisplay);
 	const safeMin = Math.min(POPUP_MIN_HEIGHT, safeMax);

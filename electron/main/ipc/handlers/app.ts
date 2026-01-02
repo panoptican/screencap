@@ -1,7 +1,14 @@
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { release } from "node:os";
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import { app, clipboard, nativeImage, shell } from "electron";
+import {
+	app,
+	BrowserWindow,
+	clipboard,
+	dialog,
+	nativeImage,
+	shell,
+} from "electron";
 import sharp from "sharp";
 import { IpcChannels } from "../../../shared/ipc";
 import type { AppInfo } from "../../../shared/types";
@@ -52,6 +59,15 @@ export function registerAppHandlers(): void {
 
 	secureHandle(IpcChannels.App.GetInfo, ipcNoArgs, () => {
 		return getAppInfo();
+	});
+
+	secureHandle(IpcChannels.App.PickDirectory, ipcNoArgs, async () => {
+		const browserWindow = BrowserWindow.getFocusedWindow() ?? undefined;
+		const result = await dialog.showOpenDialog(browserWindow, {
+			properties: ["openDirectory"],
+		});
+		if (result.canceled) return null;
+		return result.filePaths[0] ?? null;
 	});
 
 	secureHandle(

@@ -41,6 +41,8 @@ export function buildContextKey(
 				return `spotify:episode:${content.id}`;
 			case "web_page":
 				return `web:${content.id}`;
+			case "ide_workspace":
+				return `ide:${app.bundleId}:${sanitizeContentId(content.id)}`;
 			default:
 				return `content:${sanitizeContentKind(content.kind)}:${sanitizeContentId(content.id)}`;
 		}

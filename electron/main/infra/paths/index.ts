@@ -1,4 +1,5 @@
 export {
+	getAppIconsDir,
 	getDbPath,
 	getFaviconsDir,
 	getOriginalsDir,

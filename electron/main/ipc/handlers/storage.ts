@@ -1,16 +1,22 @@
+import { existsSync } from "node:fs";
+import { shell } from "electron";
 import { IpcChannels } from "../../../shared/ipc";
 import type {
+	ClearableStorageCategory,
 	GetEventsOptions,
 	GetTimelineFacetsOptions,
 	Memory,
 	StoryInput,
 } from "../../../shared/types";
+import { ensureAppIcon } from "../../features/appIcons/AppIconService";
 import { ensureFavicon } from "../../features/favicons/FaviconService";
 import { normalizeProjectsInDb } from "../../features/projects";
+import { triggerQueueProcess } from "../../features/queue";
 import {
 	confirmAddiction,
 	deleteEvent,
 	dismissEvents,
+	getAddictionStatsBatch,
 	getCategoryStats,
 	getDistinctApps,
 	getDistinctAppsInRange,
@@ -19,8 +25,10 @@ import {
 	getDistinctProjectsInRange,
 	getEventById,
 	getEvents,
+	getProjectStatsBatch,
 	rejectAddiction,
 	relabelEvents,
+	updateAddictionName,
 	updateEvent,
 } from "../../infra/db/repositories/EventRepository";
 import { getEventScreenshots } from "../../infra/db/repositories/EventScreenshotRepository";
@@ -31,15 +39,25 @@ import {
 import {
 	deleteMemory,
 	getMemories,
+	getMemoryById,
 	getMemoryType,
 	insertMemory,
 	updateMemory,
 } from "../../infra/db/repositories/MemoryRepository";
 import {
+	addToQueue,
+	isEventQueued,
+} from "../../infra/db/repositories/QueueRepository";
+import {
 	getStories,
 	insertStory,
 } from "../../infra/db/repositories/StoryRepository";
 import { createLogger } from "../../infra/log";
+import {
+	clearStorageCategory,
+	getStorageCategoryPath,
+	getStorageUsageBreakdown,
+} from "../../infra/storageUsage";
 import {
 	broadcastEventsChanged,
 	broadcastEventUpdated,
@@ -47,10 +65,12 @@ import {
 } from "../../infra/windows";
 import { secureHandle } from "../secure";
 import {
+	ipcClearStorageCategoryArgs,
 	ipcConfirmAddictionArgs,
 	ipcDismissEventsArgs,
 	ipcGetEventsArgs,
 	ipcGetMemoriesArgs,
+	ipcGetStatsBatchArgs,
 	ipcGetStatsArgs,
 	ipcGetStoriesArgs,
 	ipcGetTimelineFacetsArgs,
@@ -60,7 +80,9 @@ import {
 	ipcNoArgs,
 	ipcRejectAddictionArgs,
 	ipcRelabelEventsArgs,
+	ipcRevealStorageCategoryArgs,
 	ipcSetEventCaptionArgs,
+	ipcSubmitProjectProgressCaptureArgs,
 	ipcUpdateMemoryArgs,
 } from "../validation";
 
@@ -73,13 +95,20 @@ export function registerStorageHandlers(): void {
 		(options: GetEventsOptions) => {
 			const result = getEvents(options);
 			const missing = new Map<string, string | null>();
+			const missingApps = new Set<string>();
 			for (const e of result) {
 				if (e.urlHost && !e.faviconPath) {
 					missing.set(e.urlHost, e.urlCanonical ?? null);
 				}
+				if (e.appBundleId && !e.appIconPath) {
+					missingApps.add(e.appBundleId);
+				}
 			}
 			missing.forEach((urlCanonical, host) => {
 				void ensureFavicon(host, urlCanonical);
+			});
+			missingApps.forEach((bundleId) => {
+				void ensureAppIcon(bundleId);
 			});
 			return result;
 		},
@@ -94,6 +123,30 @@ export function registerStorageHandlers(): void {
 		ipcIdArgs,
 		(eventId: string) => {
 			return getEventScreenshots(eventId);
+		},
+	);
+
+	secureHandle(IpcChannels.Storage.GetDiskUsage, ipcNoArgs, async () => {
+		const result = await getStorageUsageBreakdown();
+		return result;
+	});
+
+	secureHandle(
+		IpcChannels.Storage.ClearStorageCategory,
+		ipcClearStorageCategoryArgs,
+		async (category: ClearableStorageCategory) => {
+			return await clearStorageCategory(category);
+		},
+	);
+
+	secureHandle(
+		IpcChannels.Storage.RevealStorageCategory,
+		ipcRevealStorageCategoryArgs,
+		async (category: string) => {
+			const path = getStorageCategoryPath(category);
+			if (path) {
+				await shell.openPath(path);
+			}
 		},
 	);
 
@@ -144,6 +197,38 @@ export function registerStorageHandlers(): void {
 		},
 	);
 
+	secureHandle(
+		IpcChannels.Storage.SubmitProjectProgressCapture,
+		ipcSubmitProjectProgressCaptureArgs,
+		(input: { id: string; caption: string; project: string | null }) => {
+			const event = getEventById(input.id);
+			if (!event) return;
+
+			const caption = input.caption.trim() || null;
+			const project = input.project?.trim() || null;
+
+			updateEvent(input.id, { caption, project });
+			broadcastEventUpdated(input.id);
+
+			if (event.status !== "pending") return;
+			if (!event.originalPath || !existsSync(event.originalPath)) return;
+
+			if (!isEventQueued(input.id)) {
+				addToQueue(input.id);
+			}
+			triggerQueueProcess();
+		},
+	);
+
+	secureHandle(
+		IpcChannels.Storage.UnmarkProjectProgress,
+		ipcIdArgs,
+		(id: string) => {
+			updateEvent(id, { projectProgress: 0 });
+			broadcastEventsChanged();
+		},
+	);
+
 	secureHandle(IpcChannels.Storage.DeleteEvent, ipcIdArgs, (id: string) => {
 		deleteEvent(id);
 		broadcastEventsChanged();
@@ -177,7 +262,8 @@ export function registerStorageHandlers(): void {
 		IpcChannels.Storage.UpdateMemory,
 		ipcUpdateMemoryArgs,
 		(id: string, updates: { content: string; description?: string | null }) => {
-			const type = getMemoryType(id);
+			const existing = getMemoryById(id);
+			const type = existing?.type ?? getMemoryType(id);
 			updateMemory(id, updates);
 
 			if (type === "project") {
@@ -186,6 +272,18 @@ export function registerStorageHandlers(): void {
 					logger.info("Normalized projects after memory update", result);
 				}
 				broadcastProjectsNormalized(result);
+			}
+
+			if (
+				type === "addiction" &&
+				existing?.content &&
+				existing.content !== updates.content
+			) {
+				const updatedRows = updateAddictionName(
+					existing.content,
+					updates.content,
+				);
+				if (updatedRows > 0) broadcastEventsChanged();
 			}
 		},
 	);
@@ -212,7 +310,13 @@ export function registerStorageHandlers(): void {
 	});
 
 	secureHandle(IpcChannels.Storage.GetApps, ipcNoArgs, () => {
-		return getDistinctApps();
+		const result = getDistinctApps();
+		for (const a of result) {
+			if (!a.appIconPath) {
+				void ensureAppIcon(a.bundleId);
+			}
+		}
+		return result;
 	});
 
 	secureHandle(IpcChannels.Storage.GetWebsites, ipcNoArgs, () => {
@@ -235,6 +339,11 @@ export function registerStorageHandlers(): void {
 			for (const w of websites) {
 				if (!w.faviconPath) {
 					void ensureFavicon(w.host, null);
+				}
+			}
+			for (const a of apps) {
+				if (!a.appIconPath) {
+					void ensureAppIcon(a.bundleId);
 				}
 			}
 			return { projects, websites, apps };
@@ -262,6 +371,22 @@ export function registerStorageHandlers(): void {
 		ipcInsertStoryArgs,
 		(story: StoryInput) => {
 			insertStory(story);
+		},
+	);
+
+	secureHandle(
+		IpcChannels.Storage.GetAddictionStatsBatch,
+		ipcGetStatsBatchArgs,
+		(names: string[]) => {
+			return getAddictionStatsBatch(names);
+		},
+	);
+
+	secureHandle(
+		IpcChannels.Storage.GetProjectStatsBatch,
+		ipcGetStatsBatchArgs,
+		(names: string[]) => {
+			return getProjectStatsBatch(names);
 		},
 	);
 }

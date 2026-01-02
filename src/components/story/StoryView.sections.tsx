@@ -42,6 +42,7 @@ import {
 	formatMinutesCompact,
 	formatMinutesDelta,
 	formatSignedInt,
+	invertedDeltaTone,
 	type JournalScope,
 	riskRule,
 	riskSource,
@@ -240,10 +241,10 @@ function DotBar({ stats }: { stats: CategoryStat[] }) {
 	return (
 		<div className="space-y-4">
 			<div className="grid grid-cols-[repeat(33,1fr)] [@media(min-width:1200px)]:grid-cols-[repeat(50,1fr)] w-fit gap-[3px]">
-				{allocation.flatMap((row) =>
+				{allocation.flatMap((row, rowIndex) =>
 					Array.from({ length: row.dots }, (_, i) => (
 						<div
-							key={`${row.category}-${i}`}
+							key={`${row.category}-${rowIndex}-${i}`}
 							className="size-3 rounded-[3px] bg-muted/50"
 							style={{
 								backgroundColor: rgba(
@@ -978,7 +979,7 @@ TOMORROW
 							value={formatMinutesCompact(addictionStreak.minutes)}
 							detail={addictionStreak.addiction ?? "—"}
 							delta={addictionStreakDelta}
-							deltaTone={deltaTone(addictionStreakDeltaMinutes)}
+							deltaTone={invertedDeltaTone(addictionStreakDeltaMinutes)}
 						/>
 						<Metric
 							label="Time"
@@ -989,13 +990,13 @@ TOMORROW
 									: undefined
 							}
 							delta={riskMinutesDeltaLabel}
-							deltaTone={deltaTone(riskMinutesDelta)}
+							deltaTone={invertedDeltaTone(riskMinutesDelta)}
 						/>
 						<Metric
 							label="Confirmed"
 							value={String(confirmedRiskCount)}
 							delta={confirmedDelta}
-							deltaTone={deltaTone(confirmedDeltaValue)}
+							deltaTone={invertedDeltaTone(confirmedDeltaValue)}
 						/>
 						<Metric label="Dominant" value={dominantAddiction} />
 					</div>

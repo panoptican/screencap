@@ -42,6 +42,10 @@ export function getFaviconsDir(): string {
 	return ensureDir(join(getScreenshotsDir(), "favicons"));
 }
 
+export function getAppIconsDir(): string {
+	return ensureDir(join(getScreenshotsDir(), "appicons"));
+}
+
 export function getTempCapturesDir(): string {
 	return ensureDir(join(getScreenshotsDir(), "tmp"));
 }

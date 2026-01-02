@@ -10,61 +10,58 @@ import type {
 
 const logger = createLogger({ scope: "SystemEventsProvider" });
 
-const FRONTMOST_APP_SCRIPT = `
+const COMBINED_SCRIPT = `
 tell application "System Events"
   set frontApp to first application process whose frontmost is true
   set appName to name of frontApp
   set bundleId to bundle identifier of frontApp
   set appPid to unix id of frontApp
-  return appName & "|||" & bundleId & "|||" & appPid
-end tell
-`;
-
-const FRONT_WINDOW_SCRIPT = `
-tell application "System Events"
-  set frontApp to first application process whose frontmost is true
+  set winTitle to ""
+  set winX to 0
+  set winY to 0
+  set winW to 0
+  set winH to 0
   try
     set frontWin to first window of frontApp
     set winTitle to name of frontWin
     set winPos to position of frontWin
     set winSize to size of frontWin
-    return winTitle & "|||" & (item 1 of winPos) & "|||" & (item 2 of winPos) & "|||" & (item 1 of winSize) & "|||" & (item 2 of winSize)
-  on error
-    return "|||0|||0|||0|||0"
+    set winX to item 1 of winPos
+    set winY to item 2 of winPos
+    set winW to item 1 of winSize
+    set winH to item 2 of winSize
   end try
+  return appName & "|||" & bundleId & "|||" & appPid & "|||" & winTitle & "|||" & winX & "|||" & winY & "|||" & winW & "|||" & winH
 end tell
 `;
 
-function parseAppOutput(output: string): ForegroundApp | null {
+interface ParsedOutput {
+	app: ForegroundApp;
+	window: Omit<ForegroundWindow, "displayId" | "isFullscreen">;
+}
+
+function parseOutput(output: string): ParsedOutput | null {
 	const parts = output.split("|||");
-	if (parts.length < 3) return null;
+	if (parts.length < 8) return null;
 
 	const pid = parseInt(parts[2], 10);
 	if (Number.isNaN(pid)) return null;
 
-	return {
-		name: parts[0],
-		bundleId: parts[1],
-		pid,
-	};
-}
-
-function parseWindowOutput(
-	output: string,
-): Omit<ForegroundWindow, "displayId" | "isFullscreen"> | null {
-	const parts = output.split("|||");
-	if (parts.length < 5) return null;
-
-	const x = parseInt(parts[1], 10);
-	const y = parseInt(parts[2], 10);
-	const width = parseInt(parts[3], 10);
-	const height = parseInt(parts[4], 10);
-
-	if ([x, y, width, height].some(Number.isNaN)) return null;
+	const x = parseInt(parts[4], 10) || 0;
+	const y = parseInt(parts[5], 10) || 0;
+	const width = parseInt(parts[6], 10) || 0;
+	const height = parseInt(parts[7], 10) || 0;
 
 	return {
-		title: parts[0],
-		bounds: { x, y, width, height },
+		app: {
+			name: parts[0],
+			bundleId: parts[1],
+			pid,
+		},
+		window: {
+			title: parts[3] || "",
+			bounds: { x, y, width, height },
+		},
 	};
 }
 
@@ -118,44 +115,33 @@ let automationState: AutomationState = "not-attempted";
 let lastAutomationError: string | null = null;
 
 export async function collectForegroundSnapshot(): Promise<ForegroundSnapshot | null> {
-	const [appResult, windowResult] = await Promise.all([
-		runAppleScript(FRONTMOST_APP_SCRIPT),
-		runAppleScript(FRONT_WINDOW_SCRIPT),
-	]);
+	const result = await runAppleScript(COMBINED_SCRIPT);
 
-	if (!appResult.success) {
-		if (isAutomationDenied(appResult.error)) {
+	if (!result.success) {
+		if (isAutomationDenied(result.error)) {
 			automationState = "denied";
-			lastAutomationError = appResult.error;
+			lastAutomationError = result.error;
 			logger.warn("Automation permission denied for System Events");
-		} else {
-			logger.debug("Failed to get frontmost app", { error: appResult.error });
+		} else if (!result.timedOut) {
+			logger.debug("Failed to get foreground snapshot", {
+				error: result.error,
+			});
 		}
 		return null;
 	}
 
-	const app = parseAppOutput(appResult.output);
-	if (!app) {
-		logger.debug("Failed to parse app output", { output: appResult.output });
+	const parsed = parseOutput(result.output);
+	if (!parsed) {
+		logger.debug("Failed to parse output", { output: result.output });
 		return null;
 	}
 
-	let windowData: Omit<ForegroundWindow, "displayId" | "isFullscreen"> = {
-		title: "",
-		bounds: { x: 0, y: 0, width: 0, height: 0 },
-	};
-
-	if (windowResult.success) {
-		const parsed = parseWindowOutput(windowResult.output);
-		if (parsed) {
-			windowData = parsed;
-		}
-	}
-
-	const { displayId, isFullscreen } = findDisplayForWindow(windowData.bounds);
+	const { displayId, isFullscreen } = findDisplayForWindow(
+		parsed.window.bounds,
+	);
 
 	const window: ForegroundWindow = {
-		...windowData,
+		...parsed.window,
 		displayId,
 		isFullscreen,
 	};
@@ -164,7 +150,7 @@ export async function collectForegroundSnapshot(): Promise<ForegroundSnapshot | 
 	lastAutomationError = null;
 
 	return {
-		app,
+		app: parsed.app,
 		window,
 		capturedAt: Date.now(),
 	};

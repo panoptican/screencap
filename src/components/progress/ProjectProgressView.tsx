@@ -5,8 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn, groupEventsByDate } from "@/lib/utils";
-import type { Event } from "@/types";
-import { ProgressTimelineGroup } from "./ProgressTimelineGroup";
+import type { Event, GitCommit } from "@/types";
+import {
+	ProgressTimelineGroup,
+	type ProgressTimelineItem,
+} from "./ProgressTimelineGroup";
 
 type RangePreset = "today" | "7d" | "30d" | "all";
 
@@ -42,6 +45,12 @@ export function ProjectProgressView() {
 		undefined,
 	);
 	const [isLoading, setIsLoading] = useState(true);
+	const [git, setGit] = useState<{
+		repoCount: number;
+		commits: GitCommit[];
+		isLoading: boolean;
+		error: string | null;
+	}>({ repoCount: 0, commits: [], isLoading: false, error: null });
 
 	const fetchEvents = useCallback(async () => {
 		if (!window.api) return;
@@ -67,6 +76,57 @@ export function ProjectProgressView() {
 
 	const projects = useMemo(() => uniqueProjects(allEvents), [allEvents]);
 
+	const fetchGit = useCallback(async () => {
+		if (!window.api) {
+			setGit({ repoCount: 0, commits: [], isLoading: false, error: null });
+			return;
+		}
+
+		const { startDate, endDate } = rangeBounds(preset);
+		const startAt = startDate ?? 0;
+		const endAt = endDate ?? 0;
+
+		const projectsToFetch = selectedProject ? [selectedProject] : projects;
+		if (projectsToFetch.length === 0) {
+			setGit({ repoCount: 0, commits: [], isLoading: false, error: null });
+			return;
+		}
+
+		setGit((s) => ({ ...s, isLoading: true, error: null }));
+		try {
+			const results = await Promise.all(
+				projectsToFetch.map((projectName) =>
+					window.api.projectJournal.getActivity({
+						projectName,
+						startAt,
+						endAt,
+						limitPerRepo: 5000,
+					}),
+				),
+			);
+			const allCommits = results.flatMap((r) => r.commits);
+			const totalRepos = results.reduce((sum, r) => sum + r.repos.length, 0);
+			setGit({
+				repoCount: totalRepos,
+				commits: allCommits,
+				isLoading: false,
+				error: null,
+			});
+		} catch (error) {
+			setGit((s) => ({ ...s, isLoading: false, error: String(error) }));
+		}
+	}, [preset, selectedProject, projects]);
+
+	useEffect(() => {
+		void fetchGit();
+	}, [fetchGit]);
+
+	useEffect(() => {
+		if (!selectedProject && projects.length === 1) {
+			setSelectedProject(projects[0]);
+		}
+	}, [projects, selectedProject]);
+
 	useEffect(() => {
 		if (selectedProject && !projects.includes(selectedProject)) {
 			setSelectedProject(undefined);
@@ -81,9 +141,24 @@ export function ProjectProgressView() {
 		[allEvents, selectedProject],
 	);
 
-	const groupedEvents = useMemo(
-		() => groupEventsByDate(visibleEvents),
-		[visibleEvents],
+	const timelineItems = useMemo(() => {
+		const items: ProgressTimelineItem[] = visibleEvents.map((e) => ({
+			kind: "event",
+			timestamp: e.timestamp,
+			event: e,
+		}));
+
+		for (const c of git.commits) {
+			items.push({ kind: "commit", timestamp: c.timestamp, commit: c });
+		}
+
+		items.sort((a, b) => b.timestamp - a.timestamp);
+		return items;
+	}, [git.commits, visibleEvents]);
+
+	const groupedItems = useMemo(
+		() => groupEventsByDate(timelineItems),
+		[timelineItems],
 	);
 	const showProject = selectedProject == null;
 
@@ -143,23 +218,45 @@ export function ProjectProgressView() {
 
 			<ScrollArea className="flex-1">
 				<div className="p-6 space-y-8">
+					{git.isLoading || git.error ? (
+						<div className="rounded-lg border border-border bg-muted/10 p-3 text-sm">
+							{git.error ? (
+								<div className="text-destructive">{git.error}</div>
+							) : (
+								<div className="flex items-center gap-2 text-muted-foreground">
+									<Loader2 className="h-4 w-4 animate-spin" />
+									Loading commits…
+								</div>
+							)}
+						</div>
+					) : null}
+					{selectedProject &&
+					!git.isLoading &&
+					!git.error &&
+					git.repoCount === 0 ? (
+						<div className="rounded-lg border border-border bg-muted/10 p-3 text-sm text-muted-foreground">
+							No git repo linked for this project. Link one in Projects to see
+							commits here.
+						</div>
+					) : null}
 					{isLoading ? (
 						<div className="h-[60vh] flex items-center justify-center">
 							<Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
 						</div>
-					) : visibleEvents.length === 0 ? (
+					) : timelineItems.length === 0 ? (
 						<div className="text-center py-12">
 							<p className="text-muted-foreground">
-								No progress events in this range.
+								No progress events or commits in this range.
 							</p>
 						</div>
 					) : (
-						Array.from(groupedEvents.entries()).map(([date, dateEvents]) => (
+						Array.from(groupedItems.entries()).map(([date, items]) => (
 							<ProgressTimelineGroup
 								key={date}
 								date={date}
-								events={dateEvents}
+								items={items}
 								showProject={showProject}
+								onUnmark={fetchEvents}
 							/>
 						))
 					)}

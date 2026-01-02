@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { unlink } from "node:fs/promises";
 import type { CaptureResult, Event } from "../../../shared/types";
 import {
 	getLatestEventByDisplayId,
@@ -13,6 +14,7 @@ import {
 	broadcastEventCreated,
 	broadcastEventUpdated,
 } from "../../infra/windows";
+import { ensureAppIcon } from "../appIcons/AppIconService";
 import type { PolicyResult } from "../automationRules";
 import { evaluateAutomationPolicy } from "../automationRules";
 import {
@@ -48,19 +50,22 @@ function highResPathFromLowResPath(
 	return path.replace(/\.webp$/, ".hq.png");
 }
 
-function safeUnlink(path: string | null | undefined): void {
+async function safeUnlink(path: string | null | undefined): Promise<void> {
 	if (!path) return;
 	try {
-		if (existsSync(path)) unlinkSync(path);
-	} catch {
-		logger.warn("Failed to delete capture file", { path });
+		await unlink(path);
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+			logger.warn("Failed to delete capture file", { path });
+		}
 	}
 }
 
-function safeUnlinkWithHighRes(originalPath: string | null | undefined): void {
-	safeUnlink(originalPath);
+async function safeUnlinkWithHighRes(
+	originalPath: string | null | undefined,
+): Promise<void> {
 	const highResPath = highResPathFromLowResPath(originalPath);
-	safeUnlink(highResPath);
+	await Promise.all([safeUnlink(originalPath), safeUnlink(highResPath)]);
 }
 
 function buildFallbackCaption(context: ActivityContext | null): string {
@@ -113,13 +118,13 @@ function applyPolicyOverrides(
 
 function deleteHighRes(originalPath: string | null | undefined): void {
 	const highResPath = highResPathFromLowResPath(originalPath);
-	safeUnlink(highResPath);
+	void safeUnlink(highResPath);
 }
 
 export async function processCaptureResult(
 	options: ProcessCaptureOptions,
 ): Promise<{ merged: boolean; eventId: string }> {
-	const { capture, intervalMs, imageBuffer, context } = options;
+	const { capture, intervalMs, context } = options;
 	const maxMergeGapMs = intervalMs * 2 + 30_000;
 
 	const last = getLatestEventByDisplayId(capture.displayId);
@@ -171,8 +176,10 @@ export async function processCaptureResult(
 					mergedCount: (last.mergedCount ?? 1) + 1,
 				});
 
-				safeUnlink(capture.thumbnailPath);
-				safeUnlinkWithHighRes(capture.originalPath);
+				void Promise.all([
+					safeUnlink(capture.thumbnailPath),
+					safeUnlinkWithHighRes(capture.originalPath),
+				]);
 
 				logger.debug("Merged capture with existing event", {
 					eventId: last.id,
@@ -214,6 +221,10 @@ export async function processCaptureResult(
 		contextJson: context ? JSON.stringify(context) : null,
 	});
 
+	if (context?.app.bundleId) {
+		void ensureAppIcon(context.app.bundleId);
+	}
+
 	if (context?.url?.host) {
 		void ensureFavicon(context.url.host, context.url.urlCanonical ?? null);
 	}
@@ -241,14 +252,8 @@ export async function processCaptureResult(
 		return { merged: false, eventId: capture.id };
 	}
 
-	if (imageBuffer) {
-		addToQueue(capture.id, imageBuffer.toString("base64"));
-		logger.debug("Added to LLM queue", { eventId: capture.id });
-	} else if (capture.originalPath && existsSync(capture.originalPath)) {
-		addToQueue(
-			capture.id,
-			readFileSync(capture.originalPath).toString("base64"),
-		);
+	if (capture.originalPath && existsSync(capture.originalPath)) {
+		addToQueue(capture.id);
 		logger.debug("Added to LLM queue", { eventId: capture.id });
 	}
 
@@ -261,6 +266,8 @@ export interface ProcessCaptureGroupOptions {
 	intervalMs: number;
 	primaryDisplayId: string | null;
 	context: ActivityContext | null;
+	enqueueToLlmQueue?: boolean;
+	allowMerge?: boolean;
 }
 
 function pickPrimaryCapture(
@@ -291,63 +298,67 @@ export async function processCaptureGroup(
 	const last = getLatestEventByDisplayId(primaryCapture.displayId);
 	const lastEnd = last ? (last.endTimestamp ?? last.timestamp) : null;
 
-	if (
-		last &&
-		lastEnd !== null &&
-		primaryCapture.timestamp - lastEnd <= maxMergeGapMs
-	) {
-		const contextMatch = contextKeysMatch(last.contextKey, currentContextKey);
+	if (options.allowMerge !== false) {
+		if (
+			last &&
+			lastEnd !== null &&
+			primaryCapture.timestamp - lastEnd <= maxMergeGapMs
+		) {
+			const contextMatch = contextKeysMatch(last.contextKey, currentContextKey);
 
-		if (!contextMatch) {
-			logger.debug("Context key changed, creating new event", {
-				lastKey: last.contextKey,
-				currentKey: currentContextKey,
-			});
-		} else {
-			let stableHash = last.stableHash;
-			let detailHash = last.detailHash;
-
-			if (
-				(!stableHash || !detailHash) &&
-				last.originalPath &&
-				existsSync(last.originalPath)
-			) {
-				const previousBuffer = readFileSync(last.originalPath);
-				const fp = await computeFingerprint(previousBuffer);
-				stableHash = fp.stableHash;
-				detailHash = fp.detailHash;
-				updateEvent(last.id, {
-					stableHash,
-					detailHash,
-					endTimestamp: lastEnd,
-					mergedCount: last.mergedCount ?? 1,
+			if (!contextMatch) {
+				logger.debug("Context key changed, creating new event", {
+					lastKey: last.contextKey,
+					currentKey: currentContextKey,
 				});
-			}
+			} else {
+				let stableHash = last.stableHash;
+				let detailHash = last.detailHash;
 
-			const cmp = isSimilarFingerprint(
-				{ stableHash: stableHash ?? null, detailHash: detailHash ?? null },
-				{
-					stableHash: primaryCapture.stableHash,
-					detailHash: primaryCapture.detailHash,
-				},
-			);
-
-			if (cmp.isSimilar) {
-				updateEvent(last.id, {
-					endTimestamp: primaryCapture.timestamp,
-					mergedCount: (last.mergedCount ?? 1) + 1,
-				});
-
-				for (const capture of captures) {
-					safeUnlink(capture.thumbnailPath);
-					safeUnlinkWithHighRes(capture.originalPath);
+				if (
+					(!stableHash || !detailHash) &&
+					last.originalPath &&
+					existsSync(last.originalPath)
+				) {
+					const previousBuffer = readFileSync(last.originalPath);
+					const fp = await computeFingerprint(previousBuffer);
+					stableHash = fp.stableHash;
+					detailHash = fp.detailHash;
+					updateEvent(last.id, {
+						stableHash,
+						detailHash,
+						endTimestamp: lastEnd,
+						mergedCount: last.mergedCount ?? 1,
+					});
 				}
 
-				logger.debug("Merged capture group with existing event", {
-					eventId: last.id,
-				});
-				broadcastEventUpdated(last.id);
-				return { merged: true, eventId: last.id };
+				const cmp = isSimilarFingerprint(
+					{ stableHash: stableHash ?? null, detailHash: detailHash ?? null },
+					{
+						stableHash: primaryCapture.stableHash,
+						detailHash: primaryCapture.detailHash,
+					},
+				);
+
+				if (cmp.isSimilar) {
+					updateEvent(last.id, {
+						endTimestamp: primaryCapture.timestamp,
+						mergedCount: (last.mergedCount ?? 1) + 1,
+					});
+
+					void Promise.all(
+						captures.flatMap((capture) => [
+							safeUnlink(capture.thumbnailPath),
+							safeUnlinkWithHighRes(capture.originalPath),
+						]),
+					);
+
+					logger.debug("Merged capture group with existing event", {
+						eventId: last.id,
+					});
+					broadcastEventUpdated(last.id);
+					return { merged: true, eventId: last.id };
+				}
 			}
 		}
 	}
@@ -386,6 +397,10 @@ export async function processCaptureGroup(
 		contextKey: currentContextKey,
 		contextJson: effectiveContext ? JSON.stringify(effectiveContext) : null,
 	});
+
+	if (effectiveContext?.app.bundleId) {
+		void ensureAppIcon(effectiveContext.app.bundleId);
+	}
 
 	if (effectiveContext?.url?.host) {
 		void ensureFavicon(
@@ -430,11 +445,10 @@ export async function processCaptureGroup(
 	}
 
 	if (primaryCapture.originalPath && existsSync(primaryCapture.originalPath)) {
-		addToQueue(
-			eventId,
-			readFileSync(primaryCapture.originalPath).toString("base64"),
-		);
-		logger.debug("Added to LLM queue", { eventId });
+		if (options.enqueueToLlmQueue !== false) {
+			addToQueue(eventId);
+			logger.debug("Added to LLM queue", { eventId });
+		}
 	}
 
 	broadcastEventCreated(eventId);

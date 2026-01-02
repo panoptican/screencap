@@ -112,9 +112,11 @@ export function getEventById(id: string): Event | null {
     SELECT
       e.*,
       f.path AS favicon_path,
+      ai.path AS app_icon_path,
       (SELECT COUNT(*) FROM event_screenshots es WHERE es.event_id = e.id) AS screenshot_count
     FROM events e
     LEFT JOIN favicons f ON f.host = e.url_host
+    LEFT JOIN app_icons ai ON ai.bundle_id = e.app_bundle_id
     WHERE e.id = ?
   `)
 		.get(id) as RawEventRow | undefined;
@@ -141,6 +143,19 @@ export function getEvents(options: GetEventsOptions): Event[] {
 	if (options.projectProgress !== undefined) {
 		conditions.push("e.project_progress = ?");
 		params.push(options.projectProgress ? 1 : 0);
+	}
+
+	if (options.trackedAddiction) {
+		conditions.push("e.tracked_addiction = ?");
+		params.push(options.trackedAddiction);
+	}
+
+	if (options.hasTrackedAddiction !== undefined) {
+		conditions.push(
+			options.hasTrackedAddiction
+				? "e.tracked_addiction IS NOT NULL"
+				: "e.tracked_addiction IS NULL",
+		);
 	}
 
 	if (options.appBundleId) {
@@ -179,9 +194,11 @@ export function getEvents(options: GetEventsOptions): Event[] {
     SELECT
       e.*,
       f.path AS favicon_path,
+      ai.path AS app_icon_path,
       (SELECT COUNT(*) FROM event_screenshots es WHERE es.event_id = e.id) AS screenshot_count
     FROM events e
     LEFT JOIN favicons f ON f.host = e.url_host
+    LEFT JOIN app_icons ai ON ai.bundle_id = e.app_bundle_id
     WHERE ${conditions.join(" AND ")}
     ORDER BY e.timestamp DESC
   `;
@@ -251,7 +268,7 @@ export function relabelEvents(ids: string[], label: string): void {
 	const db = getDatabase();
 	const placeholders = ids.map(() => "?").join(",");
 	db.prepare(
-		`UPDATE events SET user_label = ? WHERE id IN (${placeholders})`,
+		`UPDATE events SET user_label = ?, confidence = 1 WHERE id IN (${placeholders})`,
 	).run(label, ...ids);
 }
 
@@ -335,6 +352,33 @@ export function getLatestEventByDisplayId(
 	return row ? transformRow<LatestEventByDisplayId>(row) : null;
 }
 
+export function getLatestCompletedEventByFingerprint(input: {
+	stableHash: string;
+	contextKey: string;
+	excludeId?: string;
+}): Event | null {
+	if (!isDbOpen()) return null;
+
+	const db = getDatabase();
+	const params: unknown[] = [input.stableHash, input.contextKey];
+
+	let query = `
+    SELECT *
+    FROM events
+    WHERE stable_hash = ? AND context_key = ? AND status = 'completed' AND dismissed = 0
+  `;
+
+	if (input.excludeId) {
+		query += " AND id <> ?";
+		params.push(input.excludeId);
+	}
+
+	query += " ORDER BY timestamp DESC LIMIT 1";
+
+	const row = db.prepare(query).get(...params) as RawEventRow | undefined;
+	return row ? transformRow<Event>(row) : null;
+}
+
 export function getDistinctCategories(): string[] {
 	if (!isDbOpen()) return [];
 
@@ -355,6 +399,17 @@ export function getDistinctProjects(): string[] {
 		)
 		.all() as { project: string }[];
 	return rows.map((r) => r.project);
+}
+
+export function getEarliestEventTimestampForProject(
+	project: string,
+): number | null {
+	if (!isDbOpen()) return null;
+	const db = getDatabase();
+	const row = db
+		.prepare("SELECT MIN(timestamp) AS ts FROM events WHERE project = ?")
+		.get(project) as { ts: number | null } | undefined;
+	return row?.ts ?? null;
 }
 
 type DistinctFacetOptions = {
@@ -441,9 +496,28 @@ export function updateProjectName(oldName: string, newName: string): number {
 	return result.changes;
 }
 
-export function getDistinctAppsInRange(
-	options: DistinctFacetOptions,
-): Array<{ bundleId: string; name: string | null }> {
+export function updateAddictionName(oldName: string, newName: string): number {
+	if (!isDbOpen()) return 0;
+
+	const db = getDatabase();
+	const tracked = db
+		.prepare(
+			"UPDATE events SET tracked_addiction = ? WHERE tracked_addiction = ?",
+		)
+		.run(newName, oldName);
+	const candidate = db
+		.prepare(
+			"UPDATE events SET addiction_candidate = ? WHERE addiction_candidate = ?",
+		)
+		.run(newName, oldName);
+	return tracked.changes + candidate.changes;
+}
+
+export function getDistinctAppsInRange(options: DistinctFacetOptions): Array<{
+	bundleId: string;
+	name: string | null;
+	appIconPath: string | null;
+}> {
 	if (!isDbOpen()) return [];
 
 	const db = getDatabase();
@@ -467,24 +541,234 @@ export function getDistinctAppsInRange(
 		params.push(options.dismissed ? 1 : 0);
 	}
 
-	return db
+	const rows = db
 		.prepare(
 			`
       SELECT
         e.app_bundle_id as bundleId,
-        MAX(e.app_name) as name
+        MAX(e.app_name) as name,
+        MAX(ai.path) as app_icon_path
       FROM events e
+      LEFT JOIN app_icons ai ON ai.bundle_id = e.app_bundle_id
       WHERE ${conditions.join(" AND ")}
       GROUP BY e.app_bundle_id
       ORDER BY COALESCE(MAX(e.app_name), e.app_bundle_id) COLLATE NOCASE ASC
     `,
 		)
-		.all(...params) as Array<{ bundleId: string; name: string | null }>;
+		.all(...params) as Array<{
+		bundleId: string;
+		name: string | null;
+		app_icon_path: string | null;
+	}>;
+
+	return rows.map((r) => ({
+		bundleId: r.bundleId,
+		name: r.name ?? null,
+		appIconPath: r.app_icon_path ?? null,
+	}));
 }
 
 export function getDistinctApps(): Array<{
 	bundleId: string;
 	name: string | null;
+	appIconPath: string | null;
 }> {
 	return getDistinctAppsInRange({});
+}
+
+export interface AddictionStatsRow {
+	name: string;
+	lastIncidentAt: number | null;
+	weekCount: number;
+	prevWeekCount: number;
+	coverOriginalPath: string | null;
+	coverThumbnailPath: string | null;
+}
+
+export function getAddictionStatsBatch(
+	names: string[],
+): Record<string, AddictionStatsRow> {
+	if (!isDbOpen() || names.length === 0) return {};
+
+	const db = getDatabase();
+	const now = Date.now();
+	const weekMs = 7 * 24 * 60 * 60 * 1000;
+	const weekStart = now - weekMs;
+	const prevWeekStart = now - 2 * weekMs;
+
+	const placeholders = names.map(() => "?").join(",");
+
+	const rows = db
+		.prepare(
+			`
+		SELECT
+			e.tracked_addiction AS name,
+			MAX(COALESCE(e.end_timestamp, e.timestamp)) AS last_incident_at,
+			SUM(CASE WHEN e.timestamp >= ? AND e.timestamp <= ? THEN 1 ELSE 0 END) AS week_count,
+			SUM(CASE WHEN e.timestamp >= ? AND e.timestamp < ? THEN 1 ELSE 0 END) AS prev_week_count
+		FROM events e
+		WHERE e.tracked_addiction IN (${placeholders})
+		  AND e.dismissed = 0
+		GROUP BY e.tracked_addiction
+	`,
+		)
+		.all(weekStart, now, prevWeekStart, weekStart, ...names) as Array<{
+		name: string;
+		last_incident_at: number | null;
+		week_count: number;
+		prev_week_count: number;
+	}>;
+
+	const coverRows = db
+		.prepare(
+			`
+		SELECT
+			e.tracked_addiction AS name,
+			e.original_path,
+			e.thumbnail_path
+		FROM events e
+		WHERE e.id IN (
+			SELECT id FROM (
+				SELECT id, tracked_addiction,
+					ROW_NUMBER() OVER (PARTITION BY tracked_addiction ORDER BY timestamp DESC) AS rn
+				FROM events
+				WHERE tracked_addiction IN (${placeholders}) AND dismissed = 0
+			)
+			WHERE rn = 1
+		)
+	`,
+		)
+		.all(...names) as Array<{
+		name: string;
+		original_path: string | null;
+		thumbnail_path: string | null;
+	}>;
+
+	const coverMap = new Map(coverRows.map((r) => [r.name, r]));
+
+	const result: Record<string, AddictionStatsRow> = {};
+	for (const name of names) {
+		const stats = rows.find((r) => r.name === name);
+		const cover = coverMap.get(name);
+		result[name] = {
+			name,
+			lastIncidentAt: stats?.last_incident_at ?? null,
+			weekCount: stats?.week_count ?? 0,
+			prevWeekCount: stats?.prev_week_count ?? 0,
+			coverOriginalPath: cover?.original_path ?? null,
+			coverThumbnailPath: cover?.thumbnail_path ?? null,
+		};
+	}
+
+	return result;
+}
+
+export interface ProjectStatsRow {
+	name: string;
+	eventCount: number;
+	lastEventAt: number | null;
+	coverOriginalPath: string | null;
+	coverThumbnailPath: string | null;
+	coverProjectProgress: number;
+}
+
+export function getProjectStatsBatch(
+	names: string[],
+): Record<string, ProjectStatsRow> {
+	if (!isDbOpen() || names.length === 0) return {};
+
+	const db = getDatabase();
+	const placeholders = names.map(() => "?").join(",");
+
+	const countRows = db
+		.prepare(
+			`
+		SELECT
+			e.project AS name,
+			COUNT(*) AS event_count,
+			MAX(e.timestamp) AS last_event_at
+		FROM events e
+		WHERE e.project IN (${placeholders})
+		  AND e.dismissed = 0
+		GROUP BY e.project
+	`,
+		)
+		.all(...names) as Array<{
+		name: string;
+		event_count: number;
+		last_event_at: number | null;
+	}>;
+
+	const progressCoverRows = db
+		.prepare(
+			`
+		SELECT
+			e.project AS name,
+			e.original_path,
+			e.thumbnail_path,
+			e.project_progress
+		FROM events e
+		WHERE e.id IN (
+			SELECT id FROM (
+				SELECT id, project,
+					ROW_NUMBER() OVER (PARTITION BY project ORDER BY timestamp DESC) AS rn
+				FROM events
+				WHERE project IN (${placeholders}) AND dismissed = 0 AND project_progress = 1
+			)
+			WHERE rn = 1
+		)
+	`,
+		)
+		.all(...names) as Array<{
+		name: string;
+		original_path: string | null;
+		thumbnail_path: string | null;
+		project_progress: number;
+	}>;
+
+	const fallbackCoverRows = db
+		.prepare(
+			`
+		SELECT
+			e.project AS name,
+			e.original_path,
+			e.thumbnail_path,
+			e.project_progress
+		FROM events e
+		WHERE e.id IN (
+			SELECT id FROM (
+				SELECT id, project,
+					ROW_NUMBER() OVER (PARTITION BY project ORDER BY timestamp DESC) AS rn
+				FROM events
+				WHERE project IN (${placeholders}) AND dismissed = 0
+			)
+			WHERE rn = 1
+		)
+	`,
+		)
+		.all(...names) as Array<{
+		name: string;
+		original_path: string | null;
+		thumbnail_path: string | null;
+		project_progress: number;
+	}>;
+
+	const progressMap = new Map(progressCoverRows.map((r) => [r.name, r]));
+	const fallbackMap = new Map(fallbackCoverRows.map((r) => [r.name, r]));
+
+	const result: Record<string, ProjectStatsRow> = {};
+	for (const name of names) {
+		const stats = countRows.find((r) => r.name === name);
+		const cover = progressMap.get(name) ?? fallbackMap.get(name);
+		result[name] = {
+			name,
+			eventCount: stats?.event_count ?? 0,
+			lastEventAt: stats?.last_event_at ?? null,
+			coverOriginalPath: cover?.original_path ?? null,
+			coverThumbnailPath: cover?.thumbnail_path ?? null,
+			coverProjectProgress: cover?.project_progress ?? 0,
+		};
+	}
+
+	return result;
 }

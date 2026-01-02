@@ -84,6 +84,5 @@ export function useMemories() {
 		addictions: memories.filter((m) => m.type === "addiction"),
 		projects: memories.filter((m) => m.type === "project"),
 		preferences: memories.filter((m) => m.type === "preference"),
-		corrections: memories.filter((m) => m.type === "correction"),
 	};
 }

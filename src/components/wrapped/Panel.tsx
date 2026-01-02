@@ -21,7 +21,6 @@ export function Panel({
 				className,
 			)}
 		>
-			{/* [background-image:radial-gradient(circle_at_1px_1px,hsl(var(--foreground))_1px,transparent_0)] [background-size:14px_14px] */}
 			<div className="absolute inset-0 opacity-[0.08] " />
 			<div className="relative p-5">
 				<div className="flex items-start justify-between gap-4">

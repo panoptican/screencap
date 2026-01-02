@@ -7,6 +7,7 @@ import {
 	MonitorPlay,
 	Music,
 	Trash2,
+	TrendingUp,
 } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -33,17 +34,17 @@ const STATUS_ICON = {
 function getCategoryOverlayColor(category: string | null): string {
 	switch (category) {
 		case "Study":
-			return "bg-blue-500/90 text-white";
+			return "bg-blue-900/60 text-blue-400 backdrop-blur-sm";
 		case "Work":
-			return "bg-green-500/90 text-white";
+			return "bg-green-900/60 text-green-400 backdrop-blur-sm";
 		case "Leisure":
-			return "bg-purple-500/90 text-white";
+			return "bg-purple-900/80 text-purple-400 backdrop-blur-sm";
 		case "Chores":
-			return "bg-orange-500/90 text-white";
+			return "bg-orange-900/60 text-orange-400 backdrop-blur-sm";
 		case "Social":
-			return "bg-pink-500/90 text-white";
+			return "bg-pink-900/70 text-pink-400 backdrop-blur-sm";
 		default:
-			return "bg-gray-500/90 text-white";
+			return "bg-gray-900/60 text-gray-400 backdrop-blur-sm";
 	}
 }
 
@@ -163,11 +164,6 @@ export const EventCard = memo(function EventCard({
 	const contentLabel = useMemo(() => formatContentLabel(event), [event]);
 	const appLabel = event.appName ?? null;
 
-	const showConfidence = useMemo(() => {
-		if (event.confidence == null) return false;
-		return event.confidence < 0.75;
-	}, [event.confidence]);
-
 	const activity = useMemo(() => {
 		if (!contentLabel) return null;
 		const icon =
@@ -185,9 +181,10 @@ export const EventCard = memo(function EventCard({
 	}, [contentLabel, event.contentKind, event.faviconPath, event.urlHost]);
 
 	const activityTypeLabel = useMemo(() => {
+		if (event.project) return event.project;
 		if (!event.category) return null;
 		return event.userLabel || event.category;
-	}, [event.category, event.userLabel]);
+	}, [event.category, event.userLabel, event.project]);
 
 	return (
 		<>
@@ -247,26 +244,20 @@ export const EventCard = memo(function EventCard({
 								)}
 							</div>
 
-							{event.projectProgress === 1 && (
-								<div className="absolute bottom-2 left-2">
-									<Badge className="bg-primary/90 text-primary-foreground border-0">
-										Progress
-									</Badge>
-								</div>
-							)}
-
 							{activityTypeLabel && (
-								<div className="absolute bottom-2 right-2">
+								<div className="absolute bottom-2 right-2 pointer-events-none">
 									<Badge
 										className={cn(
-											"border-0",
-											getCategoryOverlayColor(event.category),
+											"border-0 flex items-center gap-1 max-w-[180px]",
+											getCategoryOverlayColor(
+												event.userLabel || event.category,
+											),
 										)}
 									>
-										{activityTypeLabel}
-										{showConfidence && event.confidence !== null
-											? ` ${Math.round(event.confidence * 100)}%`
-											: ""}
+										{event.projectProgress === 1 && (
+											<TrendingUp className="h-3 w-3 flex-shrink-0" />
+										)}
+										<span className="truncate">{activityTypeLabel}</span>
 									</Badge>
 								</div>
 							)}
@@ -313,11 +304,19 @@ export const EventCard = memo(function EventCard({
 						{STATUS_ICON[event.status]}
 					</div>
 
-					<div className="flex items-center gap-1 min-w-0 text-xs text-muted-foreground">
+					<div className="flex items-center gap-0.5 min-w-0 text-xs text-muted-foreground">
 						<span className="whitespace-nowrap">{timeLabel}</span>
 						{appLabel && (
 							<>
 								<span className="text-muted-foreground/60">:</span>
+								{event.appIconPath && (
+									<img
+										src={`local-file://${event.appIconPath}`}
+										alt=""
+										className="size-4 rounded-sm object-contain"
+										loading="lazy"
+									/>
+								)}
 								<span className="truncate">{appLabel}</span>
 							</>
 						)}

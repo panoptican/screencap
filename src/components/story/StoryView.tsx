@@ -12,6 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useMemories } from "@/hooks/useMemories";
 import {
 	computeDaylineSlots,
+	countCoveredSlots,
 	SLOT_MINUTES,
 	SLOTS_PER_HOUR,
 } from "@/lib/dayline";
@@ -26,7 +27,6 @@ import {
 	buildDailyStory,
 	type CategoryStat,
 	computeAddictionStreak,
-	countCoveredSlots,
 	isRiskEvent,
 	type JournalScope,
 	longestRun,

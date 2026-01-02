@@ -1,18 +1,23 @@
 import {
-	Check,
+	BookOpen,
+	Briefcase,
 	ChevronLeft,
 	ChevronRight,
 	Copy,
 	ExternalLink,
 	Eye,
 	EyeOff,
+	Gamepad2,
 	Globe,
+	HelpCircle,
+	Home,
 	Maximize2,
 	MonitorPlay,
 	Music,
 	Settings2,
 	Tag,
 	Trash2,
+	Users,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -31,19 +36,37 @@ import {
 } from "@/components/ui/dialog";
 import {
 	DropdownMenu,
-	DropdownMenuCheckboxItem,
 	DropdownMenuContent,
 	DropdownMenuLabel,
+	DropdownMenuRadioGroup,
+	DropdownMenuRadioItem,
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+	behaviorFromAutomationRule,
+	isEmptyAutomationRule,
+	normalizeAutomationRule,
+	type RuleBehavior,
+	updatesForBehavior,
+} from "@/lib/automationRules";
 import { copyBestImage } from "@/lib/copyImage";
 import { cn, formatDate, formatTime, getCategoryColor } from "@/lib/utils";
 import { useAppStore } from "@/stores/app";
 import type { AutomationRule, Event, EventScreenshot, Settings } from "@/types";
 import { parseBackgroundFromEvent } from "@/types";
+
+const CATEGORIES = ["Study", "Work", "Leisure", "Chores", "Social", "Unknown"];
+
+const CATEGORY_ICON = {
+	Study: BookOpen,
+	Work: Briefcase,
+	Leisure: Gamepad2,
+	Chores: Home,
+	Social: Users,
+	Unknown: HelpCircle,
+} as const;
 
 function formatContentKind(kind: string | null): string {
 	if (!kind) return "";
@@ -88,10 +111,6 @@ function getActiveScreenshotIndex(
 }
 
 export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
-	const [isRelabeling, setIsRelabeling] = useState(false);
-	const [newLabel, setNewLabel] = useState(
-		event.userLabel || event.category || "",
-	);
 	const [nsfwRevealed, setNsfwRevealed] = useState(false);
 	const [screenshots, setScreenshots] = useState<EventScreenshot[]>([]);
 	const [activeScreenshotId, setActiveScreenshotId] = useState<string | null>(
@@ -101,6 +120,7 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 		Settings["automationRules"] | null
 	>(null);
 	const removeEvent = useAppStore((s) => s.removeEvent);
+	const updateEvent = useAppStore((s) => s.updateEvent);
 
 	const tags = event.tags ? JSON.parse(event.tags) : [];
 	const subcategories = event.subcategories
@@ -225,12 +245,13 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 		onOpenChange(false);
 	};
 
-	const handleRelabel = async () => {
-		if (newLabel.trim()) {
-			await window.api.storage.relabelEvents([event.id], newLabel.trim());
-			setIsRelabeling(false);
-		}
-	};
+	const handleRelabel = useCallback(
+		async (label: string) => {
+			await window.api.storage.relabelEvents([event.id], label);
+			updateEvent(event.id, { userLabel: label, confidence: 1 });
+		},
+		[event.id, updateEvent],
+	);
 
 	const handleConfirmAddiction = async () => {
 		await window.api.storage.confirmAddiction([event.id]);
@@ -256,13 +277,19 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 		) => {
 			const settings = await window.api.settings.get();
 			const existingRule = settings.automationRules[ruleType][key] ?? {};
-			const newRule: AutomationRule = { ...existingRule, ...updates };
+			const mergedRule = normalizeAutomationRule({
+				...existingRule,
+				...updates,
+			});
+			const nextTypeRules = { ...settings.automationRules[ruleType] };
+			if (isEmptyAutomationRule(mergedRule)) {
+				delete nextTypeRules[key];
+			} else {
+				nextTypeRules[key] = mergedRule;
+			}
 			const newRules = {
 				...settings.automationRules,
-				[ruleType]: {
-					...settings.automationRules[ruleType],
-					[key]: newRule,
-				},
+				[ruleType]: nextTypeRules,
 			};
 			const newSettings: Settings = {
 				...settings,
@@ -281,37 +308,15 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 		? automationRules?.hosts[event.urlHost]
 		: undefined;
 
-	const handleToggleLlmForApp = useCallback(async () => {
-		if (!event.appBundleId) return;
-		const current = appRule?.llm === "skip";
-		await updateAutomationRule("apps", event.appBundleId, {
-			llm: current ? "allow" : "skip",
-		});
-	}, [event.appBundleId, appRule?.llm, updateAutomationRule]);
+	const appBehavior = behaviorFromAutomationRule(appRule ?? {});
+	const hostBehavior = behaviorFromAutomationRule(hostRule ?? {});
 
-	const handleToggleCaptureForApp = useCallback(async () => {
-		if (!event.appBundleId) return;
-		const current = appRule?.capture === "skip";
-		await updateAutomationRule("apps", event.appBundleId, {
-			capture: current ? "allow" : "skip",
-		});
-	}, [event.appBundleId, appRule?.capture, updateAutomationRule]);
-
-	const handleToggleLlmForHost = useCallback(async () => {
-		if (!event.urlHost) return;
-		const current = hostRule?.llm === "skip";
-		await updateAutomationRule("hosts", event.urlHost, {
-			llm: current ? "allow" : "skip",
-		});
-	}, [event.urlHost, hostRule?.llm, updateAutomationRule]);
-
-	const handleToggleCaptureForHost = useCallback(async () => {
-		if (!event.urlHost) return;
-		const current = hostRule?.capture === "skip";
-		await updateAutomationRule("hosts", event.urlHost, {
-			capture: current ? "allow" : "skip",
-		});
-	}, [event.urlHost, hostRule?.capture, updateAutomationRule]);
+	const setBehavior = useCallback(
+		async (ruleType: "apps" | "hosts", key: string, behavior: RuleBehavior) => {
+			await updateAutomationRule(ruleType, key, updatesForBehavior(behavior));
+		},
+		[updateAutomationRule],
+	);
 
 	const hasAutomationOptions = Boolean(event.appBundleId || event.urlHost);
 
@@ -327,8 +332,13 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 				<DialogHeader className="px-6 py-4 border-b border-border">
 					<DialogTitle className="flex items-center gap-2">
 						Screenshot Details
-						{event.category && (
-							<Badge className={cn("ml-2", getCategoryColor(event.category))}>
+						{(event.userLabel || event.category) && (
+							<Badge
+								className={cn(
+									"ml-2",
+									getCategoryColor(event.userLabel || event.category),
+								)}
+							>
 								{event.userLabel || event.category}
 							</Badge>
 						)}
@@ -368,7 +378,7 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 								</ContextMenuTrigger>
 								<ContextMenuContent>
 									<ContextMenuItem onSelect={handleCopyPreview}>
-										<Copy className="mr-2 h-4 w-4" />
+										<Copy className="mr-2 size-3" />
 										Copy image
 									</ContextMenuItem>
 								</ContextMenuContent>
@@ -513,10 +523,22 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 									</p>
 								</div>
 							)}
-							{event.appName && (
+							{(event.appName || event.appBundleId) && (
 								<div>
 									<span className="text-muted-foreground">App:</span>
-									<p className="font-medium">{event.appName}</p>
+									<p className="font-medium flex items-center gap-1">
+										{event.appIconPath && (
+											<img
+												src={`local-file://${event.appIconPath}`}
+												alt=""
+												className="size-4 rounded-sm object-contain"
+												loading="lazy"
+											/>
+										)}
+										<span className="truncate">
+											{event.appName ?? event.appBundleId}
+										</span>
+									</p>
 								</div>
 							)}
 							{event.isFullscreen === 1 && (
@@ -572,54 +594,68 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 						)}
 
 						{background.length > 0 && (
-							<div className="p-3 rounded-lg bg-muted/30 border border-border/50 space-y-2">
-								<div className="flex items-center gap-2 text-sm text-muted-foreground">
-									<Music className="h-4 w-4" />
-									<span className="font-medium">Background Activity</span>
+							<div className="p-3 rounded-lg bg-muted/50 space-y-3">
+								<div className="grid grid-cols-[40px_minmax(0,1fr)] items-center gap-3">
+									<Music className="h-4 w-4 text-primary justify-self-center" />
+									<span className="text-sm font-medium">
+										Background Activity
+									</span>
 								</div>
-								{background.map((bg) => (
-									<div
-										key={`${bg.provider}:${bg.id}`}
-										className="flex items-center gap-3"
-									>
-										{bg.imageUrl ? (
-											<img
-												src={bg.imageUrl}
-												alt=""
-												className="h-10 w-10 rounded object-cover flex-shrink-0"
-												loading="lazy"
-											/>
-										) : (
-											<div className="h-10 w-10 rounded bg-muted flex items-center justify-center flex-shrink-0">
-												<Music className="h-5 w-5 text-muted-foreground" />
-											</div>
-										)}
-										<div className="min-w-0 flex-1">
-											<p className="text-sm font-medium truncate">{bg.title}</p>
-											{bg.subtitle && (
-												<p className="text-xs text-muted-foreground truncate">
-													{bg.subtitle}
-												</p>
-											)}
-											<p className="text-xs text-muted-foreground/60">
-												{formatContentKind(bg.kind)}
-											</p>
-										</div>
-										{bg.actionUrl && (
-											<Button
-												variant="outline"
-												size="sm"
-												className="flex-shrink-0"
-												onClick={() =>
-													void window.api.app.openExternal(bg.actionUrl!)
-												}
+								<div className="space-y-2">
+									{background.map((bg) => {
+										const title =
+											bg.title ?? formatContentKind(bg.kind) ?? "Background";
+										const actionUrl = bg.actionUrl;
+										const kindLabel = formatContentKind(bg.kind);
+										const meta =
+											bg.subtitle && kindLabel
+												? `${bg.subtitle} · ${kindLabel}`
+												: (bg.subtitle ?? kindLabel);
+
+										return (
+											<div
+												key={`${bg.provider}:${bg.id}`}
+												className="grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-3"
 											>
-												<ExternalLink className="h-3 w-3 mr-1" />
-												Open
-											</Button>
-										)}
-									</div>
-								))}
+												{bg.imageUrl ? (
+													<img
+														src={bg.imageUrl}
+														alt=""
+														className="h-10 w-10 rounded-md object-cover"
+														loading="lazy"
+													/>
+												) : (
+													<div className="h-10 w-10 rounded-md bg-background/20 flex items-center justify-center">
+														<Music className="h-5 w-5 text-muted-foreground" />
+													</div>
+												)}
+												<div className="min-w-0">
+													<p className="text-sm font-medium leading-tight truncate">
+														{title}
+													</p>
+													{meta && (
+														<p className="mt-0.5 text-xs text-muted-foreground leading-tight truncate">
+															{meta}
+														</p>
+													)}
+												</div>
+												{actionUrl && (
+													<Button
+														variant="outline"
+														size="sm"
+														className="flex-shrink-0"
+														onClick={() =>
+															void window.api.app.openExternal(actionUrl)
+														}
+													>
+														<ExternalLink />
+														Open
+													</Button>
+												)}
+											</div>
+										);
+									})}
+								</div>
 							</div>
 						)}
 
@@ -738,104 +774,112 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 						)}
 
 						<div className="flex items-center gap-2 pt-4 border-t border-border">
-							{isRelabeling ? (
-								<div className="flex gap-2 flex-1">
-									<Input
-										value={newLabel}
-										onChange={(e) => setNewLabel(e.target.value)}
-										placeholder="New label..."
-										className="flex-1"
-										autoFocus
-										onKeyDown={(e) => e.key === "Enter" && handleRelabel()}
-									/>
-									<Button size="sm" onClick={handleRelabel}>
-										<Check className="h-4 w-4" />
-									</Button>
-									<Button
-										size="sm"
-										variant="ghost"
-										onClick={() => setIsRelabeling(false)}
-									>
-										Cancel
-									</Button>
-								</div>
-							) : (
-								<>
-									<Button
-										variant="outline"
-										size="sm"
-										onClick={() => setIsRelabeling(true)}
-									>
-										<Tag className="h-4 w-4 mr-2" />
+							<DropdownMenu>
+								<DropdownMenuTrigger asChild>
+									<Button variant="outline" size="sm">
+										<Tag className="h-4 w-4" />
 										Relabel
 									</Button>
-									<Button variant="outline" size="sm" onClick={handleDismiss}>
-										<Trash2 className="h-4 w-4 mr-2" />
-										Dismiss
-									</Button>
-									{hasAutomationOptions && (
-										<DropdownMenu>
-											<DropdownMenuTrigger asChild>
-												<Button variant="outline" size="sm">
-													<Settings2 className="h-4 w-4 mr-2" />
-													Automation
-												</Button>
-											</DropdownMenuTrigger>
-											<DropdownMenuContent align="start">
-												{event.appBundleId && (
-													<>
-														<DropdownMenuLabel>
-															{event.appName || event.appBundleId}
-														</DropdownMenuLabel>
-														<DropdownMenuCheckboxItem
-															checked={appRule?.llm === "skip"}
-															onCheckedChange={handleToggleLlmForApp}
-														>
-															Skip LLM
-														</DropdownMenuCheckboxItem>
-														<DropdownMenuCheckboxItem
-															checked={appRule?.capture === "skip"}
-															onCheckedChange={handleToggleCaptureForApp}
-														>
-															Skip capture
-														</DropdownMenuCheckboxItem>
-													</>
-												)}
-												{event.appBundleId && event.urlHost && (
-													<DropdownMenuSeparator />
-												)}
-												{event.urlHost && (
-													<>
-														<DropdownMenuLabel>
-															{event.urlHost}
-														</DropdownMenuLabel>
-														<DropdownMenuCheckboxItem
-															checked={hostRule?.llm === "skip"}
-															onCheckedChange={handleToggleLlmForHost}
-														>
-															Skip LLM
-														</DropdownMenuCheckboxItem>
-														<DropdownMenuCheckboxItem
-															checked={hostRule?.capture === "skip"}
-															onCheckedChange={handleToggleCaptureForHost}
-														>
-															Skip capture
-														</DropdownMenuCheckboxItem>
-													</>
-												)}
-											</DropdownMenuContent>
-										</DropdownMenu>
-									)}
-									<div className="flex-1" />
-									<Button
-										variant="destructive"
-										size="sm"
-										onClick={handleDelete}
+								</DropdownMenuTrigger>
+								<DropdownMenuContent align="start">
+									<DropdownMenuRadioGroup
+										value={event.userLabel || event.category || ""}
+										onValueChange={(value) => void handleRelabel(value)}
 									>
-										Delete Permanently
-									</Button>
-								</>
+										{CATEGORIES.map((cat) => {
+											const Icon =
+												CATEGORY_ICON[cat as keyof typeof CATEGORY_ICON];
+											return (
+												<DropdownMenuRadioItem key={cat} value={cat}>
+													<Icon className="h-4 w-4 mr-2" />
+													{cat}
+												</DropdownMenuRadioItem>
+											);
+										})}
+									</DropdownMenuRadioGroup>
+								</DropdownMenuContent>
+							</DropdownMenu>
+							<Button variant="outline" size="sm" onClick={handleDismiss}>
+								<Trash2 className="h-4 w-4" />
+								Dismiss
+							</Button>
+							{hasAutomationOptions && (
+								<DropdownMenu>
+									<DropdownMenuTrigger asChild>
+										<Button variant="outline" size="sm">
+											<Settings2 className="h-4 w-4" />
+											Rules
+										</Button>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent align="start">
+										{event.appBundleId && (
+											<>
+												<DropdownMenuLabel>
+													{event.appName || event.appBundleId}
+												</DropdownMenuLabel>
+												<DropdownMenuRadioGroup
+													value={appBehavior}
+													onValueChange={(value) =>
+														void setBehavior(
+															"apps",
+															event.appBundleId!,
+															value as RuleBehavior,
+														)
+													}
+												>
+													<DropdownMenuRadioItem value="default">
+														Default
+													</DropdownMenuRadioItem>
+													<DropdownMenuRadioItem value="no_capture">
+														Don&apos;t capture
+													</DropdownMenuRadioItem>
+													<DropdownMenuRadioItem value="capture_only">
+														Capture only (no AI)
+													</DropdownMenuRadioItem>
+													<DropdownMenuRadioItem value="capture_ai">
+														Capture + AI
+													</DropdownMenuRadioItem>
+												</DropdownMenuRadioGroup>
+											</>
+										)}
+										{event.appBundleId && event.urlHost && (
+											<DropdownMenuSeparator />
+										)}
+										{event.urlHost && (
+											<>
+												<DropdownMenuLabel>{event.urlHost}</DropdownMenuLabel>
+												<DropdownMenuRadioGroup
+													value={hostBehavior}
+													onValueChange={(value) =>
+														void setBehavior(
+															"hosts",
+															event.urlHost!,
+															value as RuleBehavior,
+														)
+													}
+												>
+													<DropdownMenuRadioItem value="default">
+														Default
+													</DropdownMenuRadioItem>
+													<DropdownMenuRadioItem value="no_capture">
+														Don&apos;t capture
+													</DropdownMenuRadioItem>
+													<DropdownMenuRadioItem value="capture_only">
+														Capture only (no AI)
+													</DropdownMenuRadioItem>
+													<DropdownMenuRadioItem value="capture_ai">
+														Capture + AI
+													</DropdownMenuRadioItem>
+												</DropdownMenuRadioGroup>
+											</>
+										)}
+									</DropdownMenuContent>
+								</DropdownMenu>
 							)}
+							<div className="flex-1" />
+							<Button variant="destructive" size="sm" onClick={handleDelete}>
+								Delete Permanently
+							</Button>
 						</div>
 					</div>
 				</ScrollArea>

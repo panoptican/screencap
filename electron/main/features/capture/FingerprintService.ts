@@ -73,19 +73,20 @@ async function computeDHashHex(
 }
 
 export async function computeFingerprint(input: Buffer): Promise<Fingerprint> {
-	const stableHash = await computeDHashHex(input, {
-		hashWidth: 8,
-		hashHeight: 8,
-		blurSigma: 1.2,
-		mask: dHashMaskTopRight,
-	});
-
-	const detailHash = await computeDHashHex(input, {
-		hashWidth: 16,
-		hashHeight: 16,
-		blurSigma: 0.3,
-		mask: dHashMaskTopRight,
-	});
+	const [stableHash, detailHash] = await Promise.all([
+		computeDHashHex(input, {
+			hashWidth: 8,
+			hashHeight: 8,
+			blurSigma: 1.2,
+			mask: dHashMaskTopRight,
+		}),
+		computeDHashHex(input, {
+			hashWidth: 16,
+			hashHeight: 16,
+			blurSigma: 0.3,
+			mask: dHashMaskTopRight,
+		}),
+	]);
 
 	return { stableHash, detailHash };
 }

@@ -31,6 +31,12 @@ function mergeSettings(base: Settings, incoming: unknown): Settings {
 				: incomingOnboarding.completedAt,
 	};
 
+	const incomingShortcuts = partial.shortcuts;
+	next.shortcuts = {
+		...base.shortcuts,
+		...(incomingShortcuts ?? {}),
+	};
+
 	return next;
 }
 

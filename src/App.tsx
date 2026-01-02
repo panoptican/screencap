@@ -3,13 +3,15 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { PermissionDialog } from "@/components/dialogs/PermissionDialog";
 import { AppBackdrop } from "@/components/layout/AppBackdrop";
 import { Sidebar } from "@/components/layout/Sidebar";
-import { MemoryView } from "@/components/memory/MemoryView";
+import { AddictionsView } from "@/components/memory/AddictionsView";
+import { ProjectsView } from "@/components/memory/ProjectsView";
 import { OnboardingWizard } from "@/components/onboarding";
 import { ProjectProgressView } from "@/components/progress/ProjectProgressView";
 import { SettingsView } from "@/components/settings/SettingsView";
 import { StoryView } from "@/components/story/StoryView";
 import { Timeline } from "@/components/timeline/Timeline";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useMemories } from "@/hooks/useMemories";
 import { usePermission } from "@/hooks/usePermission";
 import { useSettings } from "@/hooks/useSettings";
 import { useAppStore } from "@/stores/app";
@@ -23,6 +25,7 @@ export default function App() {
 	const settingsLoaded = useAppStore((s) => s.settingsLoaded);
 	const { hasPermission, checkPermission } = usePermission();
 	const { settings } = useSettings();
+	useMemories();
 	const [showPermissionDialog, setShowPermissionDialog] = useState(false);
 	const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
 
@@ -89,8 +92,9 @@ export default function App() {
 				<main className="relative flex-1 overflow-hidden">
 					{view === "timeline" && <Timeline />}
 					{view === "progress" && <ProjectProgressView />}
-					{view === "memory" && <MemoryView />}
 					{view === "story" && <StoryView />}
+					{view === "projects" && <ProjectsView />}
+					{view === "addictions" && <AddictionsView />}
 					{view === "settings" && <SettingsView />}
 				</main>
 				{showPermissionDialog && (

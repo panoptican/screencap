@@ -1,15 +1,32 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
-import { TrayPopup } from "./components/TrayPopup";
+import { FpsGuard } from "./components/performance/FpsGuard";
+import { ProjectProgressCapturePopup } from "./components/popup/ProjectProgressCapturePopup";
+import { StreakPopup } from "./components/popup/StreakPopup";
 import "./styles/globals.css";
 
 const rootElement = document.getElementById("root")!;
-const isPopup = window.location.hash === "#popup";
+const hash = window.location.hash;
+const popupKind =
+	hash === "#popup"
+		? "streak"
+		: hash.startsWith("#popup-capture")
+			? "capture"
+			: null;
 
 try {
 	ReactDOM.createRoot(rootElement).render(
-		<React.StrictMode>{isPopup ? <TrayPopup /> : <App />}</React.StrictMode>,
+		<React.StrictMode>
+			<FpsGuard />
+			{popupKind === "streak" ? (
+				<StreakPopup />
+			) : popupKind === "capture" ? (
+				<ProjectProgressCapturePopup />
+			) : (
+				<App />
+			)}
+		</React.StrictMode>,
 	);
 } catch (error) {
 	console.error("Failed to render app:", error);

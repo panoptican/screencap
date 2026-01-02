@@ -6,4 +6,3 @@ export {
 	stopActivityWindowTracking,
 	type WindowedCaptureResult,
 } from "./ActivityWindowService";
-

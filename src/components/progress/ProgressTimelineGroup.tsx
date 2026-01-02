@@ -1,33 +1,49 @@
 import { useMemo } from "react";
-import type { Event } from "@/types";
+import type { Event, GitCommit } from "@/types";
 import { ProgressCard } from "./ProgressCard";
+import { ProgressCommitCard } from "./ProgressCommitCard";
+
+export type ProgressTimelineItem =
+	| { kind: "event"; timestamp: number; event: Event }
+	| { kind: "commit"; timestamp: number; commit: GitCommit };
 
 export function ProgressTimelineGroup({
 	date,
-	events,
+	items,
 	showProject = false,
+	onUnmark,
 }: {
 	date: string;
-	events: Event[];
+	items: ProgressTimelineItem[];
 	showProject?: boolean;
+	onUnmark?: () => void;
 }) {
 	const ordered = useMemo(
-		() => [...events].sort((a, b) => b.timestamp - a.timestamp),
-		[events],
+		() => [...items].sort((a, b) => b.timestamp - a.timestamp),
+		[items],
 	);
 
 	return (
 		<div className="animate-fade-in">
 			<h3 className="text-sm font-medium text-muted-foreground mb-4">{date}</h3>
 			<div className="space-y-6">
-				{ordered.map((event, idx) => (
-					<ProgressCard
-						key={event.id}
-						event={event}
-						showProject={showProject}
-						isLast={idx === ordered.length - 1}
-					/>
-				))}
+				{ordered.map((item, idx) =>
+					item.kind === "event" ? (
+						<ProgressCard
+							key={item.event.id}
+							event={item.event}
+							showProject={showProject}
+							isLast={idx === ordered.length - 1}
+							onUnmark={onUnmark}
+						/>
+					) : (
+						<ProgressCommitCard
+							key={`${item.commit.repoRoot}:${item.commit.sha}`}
+							commit={item.commit}
+							isLast={idx === ordered.length - 1}
+						/>
+					),
+				)}
 			</div>
 		</div>
 	);

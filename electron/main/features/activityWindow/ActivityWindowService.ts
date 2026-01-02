@@ -1,18 +1,22 @@
-import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
+import { mkdir, readdir, rename, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { powerMonitor, screen } from "electron";
 import { v4 as uuid } from "uuid";
 import { SELF_APP_BUNDLE_ID } from "../../../shared/appIdentity";
 import type { CaptureResult } from "../../../shared/types";
-import { getOriginalsDir, getTempCapturesDir, getThumbnailsDir } from "../../infra/paths";
 import { createLogger } from "../../infra/log";
+import {
+	getOriginalsDir,
+	getTempCapturesDir,
+	getThumbnailsDir,
+} from "../../infra/paths";
 import { getSettings } from "../../infra/settings";
 import { evaluateAutomationPolicy } from "../automationRules";
 import { captureAllDisplays } from "../capture";
-import { collectActivityContext, collectForegroundSnapshot } from "../context";
 import type { ActivityContext, ForegroundSnapshot } from "../context";
+import { collectActivityContext, collectForegroundSnapshot } from "../context";
 import { chromiumProvider, safariProvider } from "../context/providers";
-import { computeDominantSegment, type ActivitySegment } from "./dominance";
+import { type ActivitySegment, computeDominantSegment } from "./dominance";
 
 const logger = createLogger({ scope: "ActivityWindow" });
 
@@ -95,19 +99,19 @@ const state: ServiceState = {
 	captureInFlight: null,
 };
 
-let windowLock: Promise<void> | null = null;
+let lockQueue: Promise<void> = Promise.resolve();
 
 async function withWindowLock<T>(fn: () => Promise<T>): Promise<T> {
-	if (windowLock) await windowLock;
 	let release!: () => void;
-	windowLock = new Promise<void>((resolve) => {
+	const prev = lockQueue;
+	lockQueue = new Promise<void>((resolve) => {
 		release = resolve;
 	});
+	await prev;
 	try {
 		return await fn();
 	} finally {
 		release();
-		windowLock = null;
 	}
 }
 
@@ -124,7 +128,10 @@ async function resolveUrlHost(
 	snapshot: ForegroundSnapshot,
 	displayId: string,
 ): Promise<string | null> {
-	if (!chromiumProvider.supports(snapshot) && !safariProvider.supports(snapshot))
+	if (
+		!chromiumProvider.supports(snapshot) &&
+		!safariProvider.supports(snapshot)
+	)
 		return null;
 
 	const now = snapshot.capturedAt;
@@ -154,18 +161,33 @@ async function resolveUrlHost(
 	return host;
 }
 
-function ensureDir(path: string): void {
-	mkdirSync(path, { recursive: true });
+async function ensureDir(path: string): Promise<void> {
+	await mkdir(path, { recursive: true });
 }
 
-function cleanupTempRoot(): void {
+async function cleanupTempRoot(): Promise<void> {
 	const root = getTempCapturesDir();
-	for (const entry of readdirSync(root, { withFileTypes: true })) {
-		rmSync(join(root, entry.name), { recursive: true, force: true });
-	}
+	try {
+		const entries = await readdir(root, { withFileTypes: true });
+		await Promise.all(
+			entries.map((entry) =>
+				rm(join(root, entry.name), { recursive: true, force: true }),
+			),
+		);
+	} catch {}
 }
 
-function initWindow(now: number, continuation: ForegroundSnapshot | null): void {
+async function safeRm(path: string | null): Promise<void> {
+	if (!path) return;
+	try {
+		await rm(path, { recursive: true, force: true });
+	} catch {}
+}
+
+async function initWindow(
+	now: number,
+	continuation: ForegroundSnapshot | null,
+): Promise<void> {
 	state.windowStart = now;
 	state.segments = [];
 	state.candidates.clear();
@@ -174,8 +196,10 @@ function initWindow(now: number, continuation: ForegroundSnapshot | null): void 
 	state.windowDir = join(getTempCapturesDir(), state.windowId);
 	state.windowThumbnailsDir = join(state.windowDir, "thumbnails");
 	state.windowOriginalsDir = join(state.windowDir, "originals");
-	ensureDir(state.windowThumbnailsDir);
-	ensureDir(state.windowOriginalsDir);
+	await Promise.all([
+		ensureDir(state.windowThumbnailsDir),
+		ensureDir(state.windowOriginalsDir),
+	]);
 
 	if (!continuation) {
 		state.current = null;
@@ -207,9 +231,8 @@ function closeCurrent(endAt: number): void {
 
 function shouldSkipContext(context: ActivityContext | null): boolean {
 	if (!context) return false;
-	const settings = getSettings();
 	if (context.app.bundleId === SELF_APP_BUNDLE_ID) return true;
-	if (settings.excludedApps.includes(context.app.bundleId)) return true;
+	const settings = getSettings();
 	const policy = evaluateAutomationPolicy(
 		{
 			appBundleId: context.app.bundleId,
@@ -221,9 +244,8 @@ function shouldSkipContext(context: ActivityContext | null): boolean {
 }
 
 function shouldSkipBundleId(bundleId: string, urlHost: string | null): boolean {
-	const settings = getSettings();
 	if (bundleId === SELF_APP_BUNDLE_ID) return true;
-	if (settings.excludedApps.includes(bundleId)) return true;
+	const settings = getSettings();
 	const policy = evaluateAutomationPolicy(
 		{ appBundleId: bundleId, urlHost },
 		settings.automationRules,
@@ -239,18 +261,19 @@ function highResPathFromOriginal(originalPath: string): string {
 	return originalPath.replace(/\.webp$/, ".hq.png");
 }
 
-function moveCaptureFilesToPermanent(capture: CaptureResult): CaptureResult {
+async function moveCaptureFilesToPermanent(
+	capture: CaptureResult,
+): Promise<CaptureResult> {
 	const thumbnailPath = movedPath(getThumbnailsDir(), capture.thumbnailPath);
 	const originalPath = movedPath(getOriginalsDir(), capture.originalPath);
-
-	renameSync(capture.thumbnailPath, thumbnailPath);
-	renameSync(capture.originalPath, originalPath);
-
 	const tempHighRes = highResPathFromOriginal(capture.originalPath);
-	if (existsSync(tempHighRes)) {
-		const destHighRes = movedPath(getOriginalsDir(), tempHighRes);
-		renameSync(tempHighRes, destHighRes);
-	}
+	const destHighRes = movedPath(getOriginalsDir(), tempHighRes);
+
+	await Promise.all([
+		rename(capture.thumbnailPath, thumbnailPath),
+		rename(capture.originalPath, originalPath),
+		rename(tempHighRes, destHighRes).catch(() => {}),
+	]);
 
 	return { ...capture, thumbnailPath, originalPath };
 }
@@ -276,13 +299,18 @@ async function captureCandidate(target: {
 		if (state.status !== "running") return;
 		if (!context) return;
 		if (context.app.bundleId !== target.bundleId) return;
-		if (context.window.displayId && context.window.displayId !== target.displayId)
+		if (
+			context.window.displayId &&
+			context.window.displayId !== target.displayId
+		)
 			return;
 		if (target.urlHost && context.url?.host !== target.urlHost) return;
 		if (shouldSkipContext(context)) return;
 
 		const primaryDisplayId =
-			context.window.displayId ?? target.displayId ?? String(screen.getPrimaryDisplay().id);
+			context.window.displayId ??
+			target.displayId ??
+			String(screen.getPrimaryDisplay().id);
 
 		const captures = await captureAllDisplays({
 			highResDisplayId: primaryDisplayId,
@@ -390,16 +418,16 @@ async function pollOnce(): Promise<void> {
 		if (capturedAt - state.current.startAt < MIN_STABLE_MS) return;
 		if (state.captureInFlight) return;
 
-		await captureCandidate({ key, bundleId, displayId, urlHost });
+		void captureCandidate({ key, bundleId, displayId, urlHost });
 	});
 }
 
 export function startActivityWindowTracking(): void {
 	if (state.status === "running") return;
-	cleanupTempRoot();
 	state.status = "running";
-	initWindow(Date.now(), null);
-	state.pollInFlight = pollOnce()
+	state.pollInFlight = cleanupTempRoot()
+		.then(() => initWindow(Date.now(), null))
+		.then(() => pollOnce())
 		.catch(() => {})
 		.finally(() => {
 			state.pollInFlight = null;
@@ -422,13 +450,10 @@ export function stopActivityWindowTracking(): void {
 	}
 	state.status = "stopped";
 	const windowDir = state.windowDir;
-	const cleanup = () => {
-		if (windowDir) rmSync(windowDir, { recursive: true, force: true });
-	};
 	if (state.captureInFlight) {
-		void state.captureInFlight.finally(cleanup);
+		void state.captureInFlight.finally(() => safeRm(windowDir));
 	} else {
-		cleanup();
+		void safeRm(windowDir);
 	}
 	state.windowId = null;
 	state.windowDir = null;
@@ -451,9 +476,8 @@ export async function discardActivityWindow(windowEnd: number): Promise<void> {
 		const safeWindowEnd = Math.max(state.windowStart, windowEnd);
 		if (state.captureInFlight) await state.captureInFlight;
 		const continuation = state.lastSnapshot;
-		if (state.windowDir)
-			rmSync(state.windowDir, { recursive: true, force: true });
-		initWindow(safeWindowEnd, continuation);
+		await safeRm(state.windowDir);
+		await initWindow(safeWindowEnd, continuation);
 	});
 }
 
@@ -491,10 +515,13 @@ export async function finalizeActivityWindow(
 		const continuation = state.lastSnapshot;
 		const currentWindowDir = state.windowDir;
 
+		const cleanupAndInit = async () => {
+			await safeRm(currentWindowDir);
+			await initWindow(safeWindowEnd, continuation);
+		};
+
 		if (!dominant) {
-			if (currentWindowDir)
-				rmSync(currentWindowDir, { recursive: true, force: true });
-			initWindow(safeWindowEnd, continuation);
+			await cleanupAndInit();
 			return {
 				kind: "skip",
 				windowStart,
@@ -504,27 +531,19 @@ export async function finalizeActivityWindow(
 		}
 
 		if (shouldSkipBundleId(dominant.bundleId, dominant.urlHost)) {
-			if (currentWindowDir)
-				rmSync(currentWindowDir, { recursive: true, force: true });
-			initWindow(safeWindowEnd, continuation);
+			await cleanupAndInit();
 			return {
 				kind: "skip",
 				windowStart,
 				windowEnd: safeWindowEnd,
 				reason:
-					dominant.bundleId === SELF_APP_BUNDLE_ID
-						? "self"
-						: getSettings().excludedApps.includes(dominant.bundleId)
-							? "excluded"
-							: "policy-skip",
+					dominant.bundleId === SELF_APP_BUNDLE_ID ? "self" : "policy-skip",
 			};
 		}
 
 		const candidate = state.candidates.get(dominant.key) ?? null;
 		if (!candidate) {
-			if (currentWindowDir)
-				rmSync(currentWindowDir, { recursive: true, force: true });
-			initWindow(safeWindowEnd, continuation);
+			await cleanupAndInit();
 			return {
 				kind: "skip",
 				windowStart,
@@ -535,17 +554,16 @@ export async function finalizeActivityWindow(
 
 		let captures: CaptureResult[] = [];
 		try {
-			captures = candidate.captures
-				.map(moveCaptureFilesToPermanent)
-				.map((c) => ({
-					...c,
-					timestamp: safeWindowEnd,
-				}));
+			const movedCaptures = await Promise.all(
+				candidate.captures.map(moveCaptureFilesToPermanent),
+			);
+			captures = movedCaptures.map((c) => ({
+				...c,
+				timestamp: safeWindowEnd,
+			}));
 		} catch (error) {
 			logger.debug("Failed to finalize candidate capture", { error });
-			if (currentWindowDir)
-				rmSync(currentWindowDir, { recursive: true, force: true });
-			initWindow(safeWindowEnd, continuation);
+			await cleanupAndInit();
 			return {
 				kind: "skip",
 				windowStart,
@@ -554,9 +572,7 @@ export async function finalizeActivityWindow(
 			};
 		}
 
-		if (currentWindowDir)
-			rmSync(currentWindowDir, { recursive: true, force: true });
-		initWindow(safeWindowEnd, continuation);
+		await cleanupAndInit();
 
 		return {
 			kind: "capture",
@@ -568,4 +584,3 @@ export async function finalizeActivityWindow(
 		};
 	});
 }
-

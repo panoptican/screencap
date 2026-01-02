@@ -16,15 +16,13 @@ const SelectedBulkActions = memo(function SelectedBulkActions() {
 });
 
 const TimelineList = memo(function TimelineList({
-	events,
-	groupedEvents,
+	groups,
 	hasNextPage,
 }: {
-	events: Event[];
-	groupedEvents: Map<string, Event[]>;
+	groups: Map<string, Event[]>;
 	hasNextPage: boolean;
 }) {
-	if (events.length === 0) {
+	if (groups.size === 0) {
 		return (
 			<div className="text-center py-12">
 				<p className="text-muted-foreground">
@@ -34,7 +32,7 @@ const TimelineList = memo(function TimelineList({
 		);
 	}
 
-	const entries = Array.from(groupedEvents.entries());
+	const entries = Array.from(groups.entries());
 
 	return (
 		<>
@@ -53,7 +51,6 @@ const TimelineList = memo(function TimelineList({
 
 export function Timeline() {
 	const { events, hasNextPage, isLoading } = useEvents();
-
 	const groupedEvents = useMemo(() => {
 		return groupEventsByDate(events);
 	}, [events]);
@@ -71,11 +68,7 @@ export function Timeline() {
 							<Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
 						</div>
 					) : (
-						<TimelineList
-							events={events}
-							groupedEvents={groupedEvents}
-							hasNextPage={hasNextPage}
-						/>
+						<TimelineList groups={groupedEvents} hasNextPage={hasNextPage} />
 					)}
 				</div>
 			</ScrollArea>

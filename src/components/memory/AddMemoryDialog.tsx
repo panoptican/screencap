@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import {
 	Dialog,
 	DialogContent,
+	DialogDescription,
 	DialogFooter,
 	DialogHeader,
 	DialogTitle,
@@ -31,21 +32,16 @@ const TYPE_CONFIG = {
 	},
 	project: {
 		title: "Add Project",
-		description: "Define a project and its associated tools/apps",
-		placeholder:
-			'e.g., "My Thesis project: I use Overleaf, Zotero, and Google Scholar for research"',
+		description: "A single project name (used for tracking and journaling)",
+		namePlaceholder: 'e.g., "Screencap"',
+		aboutPlaceholder:
+			"Optional. Add notes like repo name(s), stack, goals, or how to recognize it.",
 	},
 	preference: {
 		title: "Add Preference",
 		description: "Add a classification hint or special instruction",
 		placeholder:
 			'e.g., "When I\'m on Coursera or Udemy, classify as Study even if it looks like videos"',
-	},
-	correction: {
-		title: "Add Correction",
-		description: "Add a correction example",
-		placeholder:
-			'e.g., "VS Code with terminal open should be Work, not Leisure"',
 	},
 };
 
@@ -82,21 +78,29 @@ export function AddMemoryDialog({
 			<DialogContent>
 				<DialogHeader>
 					<DialogTitle>{config.title}</DialogTitle>
-					<p className="text-sm text-muted-foreground">{config.description}</p>
+					<DialogDescription>{config.description}</DialogDescription>
 				</DialogHeader>
 
-				{type === "addiction" ? (
+				{type === "addiction" || type === "project" ? (
 					<div className="space-y-3">
 						<Input
 							value={content}
 							onChange={(e) => setContent(e.target.value)}
-							placeholder={TYPE_CONFIG.addiction.namePlaceholder}
+							placeholder={
+								type === "addiction"
+									? TYPE_CONFIG.addiction.namePlaceholder
+									: TYPE_CONFIG.project.namePlaceholder
+							}
 							autoFocus
 						/>
 						<Textarea
 							value={description}
 							onChange={(e) => setDescription(e.target.value)}
-							placeholder={TYPE_CONFIG.addiction.aboutPlaceholder}
+							placeholder={
+								type === "addiction"
+									? TYPE_CONFIG.addiction.aboutPlaceholder
+									: TYPE_CONFIG.project.aboutPlaceholder
+							}
 							className="min-h-[100px]"
 						/>
 					</div>

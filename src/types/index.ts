@@ -36,6 +36,7 @@ export interface Event {
 	status: "pending" | "processing" | "completed" | "failed";
 	appBundleId: string | null;
 	appName: string | null;
+	appIconPath: string | null;
 	windowTitle: string | null;
 	urlHost: string | null;
 	urlCanonical: string | null;
@@ -80,7 +81,7 @@ export interface EventScreenshot {
 
 export interface Memory {
 	id: string;
-	type: "addiction" | "project" | "preference" | "correction";
+	type: "addiction" | "project" | "preference";
 	content: string;
 	description?: string | null;
 	createdAt: number;
@@ -117,6 +118,11 @@ export interface OnboardingState {
 	completedAt: number | null;
 }
 
+export interface ShortcutSettings {
+	captureNow: string | null;
+	captureProjectProgress: string | null;
+}
+
 export interface Settings {
 	apiKey: string | null;
 	captureInterval: number;
@@ -125,7 +131,49 @@ export interface Settings {
 	launchAtLogin: boolean;
 	automationRules: AutomationRules;
 	onboarding: OnboardingState;
+	shortcuts: ShortcutSettings;
 	llmEnabled: boolean;
+	allowVisionUploads: boolean;
+	localLlmEnabled: boolean;
+	localLlmBaseUrl: string;
+	localLlmModel: string;
+}
+
+export interface ProjectRepo {
+	id: string;
+	projectKey: string;
+	projectName: string;
+	repoRoot: string;
+	createdAt: number;
+}
+
+export interface RepoWorkSession {
+	id: string;
+	projectRepoId: string;
+	projectKey: string;
+	projectName: string;
+	repoRoot: string;
+	branch: string | null;
+	headSha: string | null;
+	startAt: number;
+	endAt: number;
+	isOpen: boolean;
+	maxInsertions: number;
+	maxDeletions: number;
+	files: string[];
+	updatedAt: number;
+}
+
+export interface GitCommit {
+	projectRepoId: string;
+	repoRoot: string;
+	sha: string;
+	timestamp: number;
+	subject: string;
+	parents: string[];
+	insertions: number;
+	deletions: number;
+	files: string[];
 }
 
 export interface Story {
@@ -157,6 +205,7 @@ export interface WebsiteEntry {
 export interface RecordedApp {
 	bundleId: string;
 	name: string | null;
+	appIconPath: string | null;
 }
 
 export type CaptureIntent = "default" | "project_progress";
@@ -170,7 +219,15 @@ export interface CaptureTriggerResult {
 	eventId: string | null;
 }
 
-export type View = "timeline" | "progress" | "story" | "memory" | "settings";
+export type View =
+	| "timeline"
+	| "progress"
+	| "story"
+	| "projects"
+	| "addictions"
+	| "settings";
+
+export type SettingsTab = "capture" | "ai" | "automation" | "data" | "system";
 
 export interface AutomationStatus {
 	systemEvents: "granted" | "denied" | "not-determined";
@@ -220,6 +277,18 @@ export interface LLMTestResult {
 	error?: string;
 }
 
+export interface OcrLine {
+	text: string;
+	confidence: number;
+}
+
+export interface OcrResult {
+	text: string;
+	lines: OcrLine[];
+	confidence: number;
+	durationMs: number;
+}
+
 export type UpdateStatus =
 	| "idle"
 	| "checking"
@@ -252,6 +321,45 @@ export interface UpdateState {
 	lastCheckedAt?: number;
 }
 
+export type ClearableStorageCategory =
+	| "tmp"
+	| "thumbnails"
+	| "appicons"
+	| "favicons"
+	| "other";
+
+export interface StorageUsageEntry {
+	key: string;
+	label: string;
+	path: string;
+	bytes: number;
+	clearable: boolean;
+}
+
+export interface StorageUsageBreakdown {
+	totalBytes: number;
+	entries: StorageUsageEntry[];
+	computedAt: number;
+}
+
+export interface AddictionStatsItem {
+	name: string;
+	lastIncidentAt: number | null;
+	weekCount: number;
+	prevWeekCount: number;
+	coverOriginalPath: string | null;
+	coverThumbnailPath: string | null;
+}
+
+export interface ProjectStatsItem {
+	name: string;
+	eventCount: number;
+	lastEventAt: number | null;
+	coverOriginalPath: string | null;
+	coverThumbnailPath: string | null;
+	coverProjectProgress: number;
+}
+
 declare global {
 	interface Window {
 		api: {
@@ -261,6 +369,7 @@ declare global {
 				getInfo: () => Promise<AppInfo>;
 				openExternal: (url: string) => Promise<void>;
 				revealInFinder: () => Promise<void>;
+				pickDirectory: () => Promise<string | null>;
 			};
 			update: {
 				getState: () => Promise<UpdateState>;
@@ -276,6 +385,7 @@ declare global {
 			};
 			popup: {
 				setHeight: (height: number) => Promise<void>;
+				startProjectProgressCapture: () => Promise<void>;
 			};
 			permissions: {
 				checkScreenCapture: () => Promise<
@@ -314,6 +424,8 @@ declare global {
 					category?: string;
 					project?: string;
 					projectProgress?: boolean;
+					trackedAddiction?: string;
+					hasTrackedAddiction?: boolean;
 					appBundleId?: string;
 					urlHost?: string;
 					startDate?: number;
@@ -323,11 +435,22 @@ declare global {
 				}) => Promise<Event[]>;
 				getEvent: (id: string) => Promise<Event | null>;
 				getEventScreenshots: (eventId: string) => Promise<EventScreenshot[]>;
+				getDiskUsage: () => Promise<StorageUsageBreakdown>;
+				clearStorageCategory: (
+					category: ClearableStorageCategory,
+				) => Promise<{ clearedBytes: number }>;
+				revealStorageCategory: (category: string) => Promise<void>;
 				dismissEvents: (ids: string[]) => Promise<void>;
 				relabelEvents: (ids: string[], label: string) => Promise<void>;
 				confirmAddiction: (ids: string[]) => Promise<void>;
 				rejectAddiction: (ids: string[]) => Promise<void>;
 				setEventCaption: (id: string, caption: string) => Promise<void>;
+				submitProjectProgressCapture: (input: {
+					id: string;
+					caption: string;
+					project: string | null;
+				}) => Promise<void>;
+				unmarkProjectProgress: (id: string) => Promise<void>;
 				deleteEvent: (id: string) => Promise<void>;
 				getMemories: (type?: string) => Promise<Memory[]>;
 				insertMemory: (memory: Memory) => Promise<void>;
@@ -361,10 +484,39 @@ declare global {
 					content: string;
 					createdAt: number;
 				}) => Promise<void>;
+				getAddictionStatsBatch: (
+					names: string[],
+				) => Promise<Record<string, AddictionStatsItem>>;
+				getProjectStatsBatch: (
+					names: string[],
+				) => Promise<Record<string, ProjectStatsItem>>;
 			};
 			settings: {
 				get: () => Promise<Settings>;
 				set: (settings: Settings) => Promise<void>;
+			};
+			shortcuts: {
+				setSuspended: (suspended: boolean) => Promise<void>;
+			};
+			projectJournal: {
+				listRepos: (projectName: string) => Promise<ProjectRepo[]>;
+				attachRepo: (projectName: string, path: string) => Promise<ProjectRepo>;
+				detachRepo: (repoId: string) => Promise<void>;
+				getActivity: (options: {
+					projectName: string;
+					startAt: number;
+					endAt: number;
+					limitPerRepo?: number;
+				}) => Promise<{
+					repos: ProjectRepo[];
+					commits: GitCommit[];
+					sessions: RepoWorkSession[];
+				}>;
+				generateSummary: (options: {
+					projectName: string;
+					startAt: number;
+					endAt: number;
+				}) => Promise<string>;
 			};
 			llm: {
 				classify: (imageBase64: string) => Promise<unknown>;
@@ -379,6 +531,10 @@ declare global {
 					periodType: "daily" | "weekly",
 				) => Promise<string>;
 				testConnection: () => Promise<LLMTestResult>;
+				testLocalConnection: () => Promise<LLMTestResult>;
+			};
+			ocr: {
+				recognize: (imageBase64: string) => Promise<OcrResult>;
 			};
 			on: (
 				channel:
@@ -387,7 +543,9 @@ declare global {
 					| "event:updated"
 					| "events:changed"
 					| "projects:normalized"
-					| "update:state",
+					| "update:state"
+					| "shortcut:capture-now"
+					| "shortcut:capture-project-progress",
 				callback: (...args: unknown[]) => void,
 			) => () => void;
 		};

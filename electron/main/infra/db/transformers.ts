@@ -36,7 +36,7 @@ export const CAMEL_TO_SNAKE_MAP: Record<string, string> = {
 	periodStart: "period_start",
 	periodEnd: "period_end",
 	eventId: "event_id",
-	imageData: "image_data",
+	nextAttemptAt: "next_attempt_at",
 	appBundleId: "app_bundle_id",
 	appName: "app_name",
 	windowTitle: "window_title",

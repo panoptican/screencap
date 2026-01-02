@@ -1,5 +1,6 @@
 appId: com.screencap.app
 productName: Screencap
+beforePack: electron/builderHooks/beforePack.cjs
 directories:
   buildResources: build
   output: dist
@@ -9,6 +10,11 @@ files:
   - '!electron.vite.config.*'
   - '!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+extraResources:
+  - from: build/ocr
+    to: ocr
+    filter:
+      - screencap-ocr
 asarUnpack:
   - node_modules/sharp/**/*
   - node_modules/better-sqlite3/**/*

@@ -11,7 +11,12 @@ export function computeDominantSegment(
 	segments: ActivitySegment[],
 	windowEnd: number,
 	interruptionMaxMs: number,
-): { key: string; bundleId: string; displayId: string; urlHost: string | null } | null {
+): {
+	key: string;
+	bundleId: string;
+	displayId: string;
+	urlHost: string | null;
+} | null {
 	const totals = new Map<
 		string,
 		{
@@ -63,4 +68,3 @@ export function computeDominantSegment(
 
 	return best;
 }
-

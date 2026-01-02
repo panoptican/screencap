@@ -1,4 +1,5 @@
 import type {
+	AddictionStatsItem,
 	AppInfo,
 	AutomationStatus,
 	CaptureResult,
@@ -6,6 +7,7 @@ import type {
 	CaptureTriggerResult,
 	CategoryStats,
 	ClassificationResult,
+	ClearableStorageCategory,
 	ContextStatus,
 	ContextTestResult,
 	Event,
@@ -13,12 +15,18 @@ import type {
 	EventSummary,
 	GetEventsOptions,
 	GetTimelineFacetsOptions,
+	GitCommit,
 	LLMTestResult,
 	Memory,
+	OcrResult,
 	PeriodType,
 	PermissionStatus,
+	ProjectRepo,
+	ProjectStatsItem,
 	RecordedApp,
+	RepoWorkSession,
 	Settings,
+	StorageUsageBreakdown,
 	Story,
 	StoryInput,
 	TimelineFacets,
@@ -33,6 +41,7 @@ export const IpcChannels = {
 		GetInfo: "app:get-info",
 		OpenExternal: "app:open-external",
 		RevealInFinder: "app:reveal-in-finder",
+		PickDirectory: "app:pick-directory",
 	},
 	Update: {
 		GetState: "update:get-state",
@@ -48,6 +57,7 @@ export const IpcChannels = {
 	},
 	Popup: {
 		SetHeight: "popup:set-height",
+		StartProjectProgressCapture: "popup:start-project-progress-capture",
 	},
 	Permissions: {
 		CheckScreenCapture: "permissions:check-screen-capture",
@@ -77,11 +87,16 @@ export const IpcChannels = {
 		GetEvents: "storage:get-events",
 		GetEvent: "storage:get-event",
 		GetEventScreenshots: "storage:get-event-screenshots",
+		GetDiskUsage: "storage:get-disk-usage",
+		ClearStorageCategory: "storage:clear-storage-category",
+		RevealStorageCategory: "storage:reveal-storage-category",
 		DismissEvents: "storage:dismiss-events",
 		RelabelEvents: "storage:relabel-events",
 		ConfirmAddiction: "storage:confirm-addiction",
 		RejectAddiction: "storage:reject-addiction",
 		SetEventCaption: "storage:set-event-caption",
+		SubmitProjectProgressCapture: "storage:submit-project-progress-capture",
+		UnmarkProjectProgress: "storage:unmark-project-progress",
 		DeleteEvent: "storage:delete-event",
 		GetMemories: "storage:get-memories",
 		InsertMemory: "storage:insert-memory",
@@ -95,15 +110,31 @@ export const IpcChannels = {
 		GetStats: "storage:get-stats",
 		GetStories: "storage:get-stories",
 		InsertStory: "storage:insert-story",
+		GetAddictionStatsBatch: "storage:get-addiction-stats-batch",
+		GetProjectStatsBatch: "storage:get-project-stats-batch",
 	},
 	Settings: {
 		Get: "settings:get",
 		Set: "settings:set",
 	},
+	Shortcuts: {
+		SetSuspended: "shortcuts:set-suspended",
+	},
+	ProjectJournal: {
+		ListRepos: "project-journal:list-repos",
+		AttachRepo: "project-journal:attach-repo",
+		DetachRepo: "project-journal:detach-repo",
+		GetActivity: "project-journal:get-activity",
+		GenerateSummary: "project-journal:generate-summary",
+	},
 	LLM: {
 		Classify: "llm:classify",
 		GenerateStory: "llm:generate-story",
 		TestConnection: "llm:test-connection",
+		TestLocalConnection: "llm:test-local-connection",
+	},
+	Ocr: {
+		Recognize: "ocr:recognize",
 	},
 } as const;
 
@@ -114,6 +145,8 @@ export const IpcEvents = {
 	EventsChanged: "events:changed",
 	ProjectsNormalized: "projects:normalized",
 	UpdateState: "update:state",
+	ShortcutCaptureNow: "shortcut:capture-now",
+	ShortcutCaptureProjectProgress: "shortcut:capture-project-progress",
 } as const;
 
 export interface IpcInvokeHandlers {
@@ -122,6 +155,7 @@ export interface IpcInvokeHandlers {
 	[IpcChannels.App.GetInfo]: () => AppInfo;
 	[IpcChannels.App.OpenExternal]: (url: string) => void;
 	[IpcChannels.App.RevealInFinder]: () => void;
+	[IpcChannels.App.PickDirectory]: () => Promise<string | null>;
 
 	[IpcChannels.Update.GetState]: () => UpdateState;
 	[IpcChannels.Update.Check]: () => void;
@@ -134,6 +168,7 @@ export interface IpcInvokeHandlers {
 	[IpcChannels.Window.Close]: () => void;
 
 	[IpcChannels.Popup.SetHeight]: (height: number) => void;
+	[IpcChannels.Popup.StartProjectProgressCapture]: () => Promise<void>;
 
 	[IpcChannels.Permissions.CheckScreenCapture]: () => PermissionStatus;
 	[IpcChannels.Permissions.HasScreenCapture]: () => boolean;
@@ -162,11 +197,22 @@ export interface IpcInvokeHandlers {
 	[IpcChannels.Storage.GetEventScreenshots]: (
 		eventId: string,
 	) => EventScreenshot[];
+	[IpcChannels.Storage.GetDiskUsage]: () => Promise<StorageUsageBreakdown>;
+	[IpcChannels.Storage.ClearStorageCategory]: (
+		category: ClearableStorageCategory,
+	) => Promise<{ clearedBytes: number }>;
+	[IpcChannels.Storage.RevealStorageCategory]: (category: string) => void;
 	[IpcChannels.Storage.DismissEvents]: (ids: string[]) => void;
 	[IpcChannels.Storage.RelabelEvents]: (ids: string[], label: string) => void;
 	[IpcChannels.Storage.ConfirmAddiction]: (ids: string[]) => void;
 	[IpcChannels.Storage.RejectAddiction]: (ids: string[]) => void;
 	[IpcChannels.Storage.SetEventCaption]: (id: string, caption: string) => void;
+	[IpcChannels.Storage.SubmitProjectProgressCapture]: (input: {
+		id: string;
+		caption: string;
+		project: string | null;
+	}) => void;
+	[IpcChannels.Storage.UnmarkProjectProgress]: (id: string) => void;
 	[IpcChannels.Storage.DeleteEvent]: (id: string) => void;
 	[IpcChannels.Storage.GetMemories]: (type?: string) => Memory[];
 	[IpcChannels.Storage.InsertMemory]: (memory: Memory) => void;
@@ -188,9 +234,41 @@ export interface IpcInvokeHandlers {
 	) => CategoryStats[];
 	[IpcChannels.Storage.GetStories]: (periodType?: string) => Story[];
 	[IpcChannels.Storage.InsertStory]: (story: StoryInput) => void;
+	[IpcChannels.Storage.GetAddictionStatsBatch]: (
+		names: string[],
+	) => Record<string, AddictionStatsItem>;
+	[IpcChannels.Storage.GetProjectStatsBatch]: (
+		names: string[],
+	) => Record<string, ProjectStatsItem>;
 
 	[IpcChannels.Settings.Get]: () => Settings;
 	[IpcChannels.Settings.Set]: (settings: Settings) => void;
+
+	[IpcChannels.Shortcuts.SetSuspended]: (suspended: boolean) => void;
+
+	[IpcChannels.ProjectJournal.ListRepos]: (
+		projectName: string,
+	) => ProjectRepo[];
+	[IpcChannels.ProjectJournal.AttachRepo]: (
+		projectName: string,
+		path: string,
+	) => Promise<ProjectRepo>;
+	[IpcChannels.ProjectJournal.DetachRepo]: (repoId: string) => void;
+	[IpcChannels.ProjectJournal.GetActivity]: (options: {
+		projectName: string;
+		startAt: number;
+		endAt: number;
+		limitPerRepo?: number;
+	}) => Promise<{
+		repos: ProjectRepo[];
+		commits: GitCommit[];
+		sessions: RepoWorkSession[];
+	}>;
+	[IpcChannels.ProjectJournal.GenerateSummary]: (options: {
+		projectName: string;
+		startAt: number;
+		endAt: number;
+	}) => Promise<string>;
 
 	[IpcChannels.LLM.Classify]: (
 		imageBase64: string,
@@ -200,6 +278,9 @@ export interface IpcInvokeHandlers {
 		periodType: PeriodType,
 	) => Promise<string>;
 	[IpcChannels.LLM.TestConnection]: () => Promise<LLMTestResult>;
+	[IpcChannels.LLM.TestLocalConnection]: () => Promise<LLMTestResult>;
+
+	[IpcChannels.Ocr.Recognize]: (imageBase64: string) => Promise<OcrResult>;
 }
 
 export interface IpcEventPayloads {
@@ -209,4 +290,6 @@ export interface IpcEventPayloads {
 	[IpcEvents.EventsChanged]: undefined;
 	[IpcEvents.ProjectsNormalized]: { updatedRows: number; groups: number };
 	[IpcEvents.UpdateState]: UpdateState;
+	[IpcEvents.ShortcutCaptureNow]: undefined;
+	[IpcEvents.ShortcutCaptureProjectProgress]: string | null;
 }

@@ -16,7 +16,15 @@ const DEFAULT_SETTINGS: Settings = {
 	launchAtLogin: false,
 	automationRules: { apps: {}, hosts: {} },
 	onboarding: { version: ONBOARDING_VERSION, completedAt: null },
+	shortcuts: {
+		captureNow: "Command+Shift+O",
+		captureProjectProgress: "Command+Shift+P",
+	},
 	llmEnabled: true,
+	allowVisionUploads: false,
+	localLlmEnabled: false,
+	localLlmBaseUrl: "http://localhost:11434/v1",
+	localLlmModel: "llama3.2",
 };
 
 export { ONBOARDING_VERSION };
@@ -45,6 +53,47 @@ function decryptApiKey(encrypted: string | null): string | null {
 	}
 }
 
+function migrateExcludedApps(settings: Settings): {
+	settings: Settings;
+	changed: boolean;
+} {
+	if (!settings.excludedApps || settings.excludedApps.length === 0) {
+		return { settings, changed: false };
+	}
+
+	const unique = Array.from(new Set(settings.excludedApps)).filter(Boolean);
+	if (unique.length === 0) {
+		if (settings.excludedApps.length === 0) return { settings, changed: false };
+		return { settings: { ...settings, excludedApps: [] }, changed: true };
+	}
+
+	let changed = false;
+	const apps = { ...(settings.automationRules?.apps ?? {}) };
+
+	for (const bundleId of unique) {
+		const prev = apps[bundleId] ?? {};
+		if (prev.capture !== "skip") {
+			apps[bundleId] = { ...prev, capture: "skip" };
+			changed = true;
+		}
+	}
+
+	if (settings.excludedApps.length > 0) {
+		changed = true;
+	}
+
+	const migrated: Settings = {
+		...settings,
+		excludedApps: [],
+		automationRules: {
+			...settings.automationRules,
+			apps,
+		},
+	};
+
+	return { settings: migrated, changed };
+}
+
 export function getSettings(): Settings {
 	const now = Date.now();
 	if (cachedSettings && now - cacheTimestamp < CACHE_TTL_MS) {
@@ -66,6 +115,13 @@ export function getSettings(): Settings {
 			...parsed,
 			apiKey: decryptApiKey(parsed.apiKey),
 		};
+
+		const migrated = migrateExcludedApps(settings);
+		if (migrated.changed) {
+			setSettings(migrated.settings);
+			return migrated.settings;
+		}
+
 		cachedSettings = settings;
 		cacheTimestamp = now;
 		return settings;

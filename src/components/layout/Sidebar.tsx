@@ -1,8 +1,9 @@
 import {
 	BookOpen,
-	Brain,
+	Briefcase,
 	Clock,
 	Command,
+	Flame,
 	Settings,
 	TrendingUp,
 } from "lucide-react";
@@ -26,8 +27,8 @@ const navItems: NavItem[] = [
 	{ id: "timeline", icon: Clock, label: "Timeline" },
 	{ id: "progress", icon: TrendingUp, label: "Progress" },
 	{ id: "story", icon: BookOpen, label: "Journal" },
-	{ id: "memory", icon: Brain, label: "Memory" },
-	{ id: "settings", icon: Settings, label: "Settings" },
+	{ id: "projects", icon: Briefcase, label: "Projects" },
+	{ id: "addictions", icon: Flame, label: "Addictions" },
 ];
 
 export function Sidebar() {
@@ -48,7 +49,7 @@ export function Sidebar() {
 								className={cn(
 									"h-10 w-10 transition-all duration-200",
 									view === item.id &&
-										"bg-primary/20 text-primary hover:bg-primary/30",
+										"bg-accent/10 text-primary hover:bg-accent/10",
 								)}
 								onClick={() => setView(item.id)}
 							>
@@ -62,19 +63,39 @@ export function Sidebar() {
 
 			<div className="flex-1" />
 
-			<Tooltip delayDuration={100}>
-				<TooltipTrigger asChild>
-					<Button
-						variant="ghost"
-						size="icon"
-						className="h-10 w-10 mb-3"
-						onClick={() => setCommandPaletteOpen(true)}
-					>
-						<Command className="h-5 w-5" />
-					</Button>
-				</TooltipTrigger>
-				<TooltipContent side="right">Command Palette (⌘K)</TooltipContent>
-			</Tooltip>
+			<div className="flex flex-col gap-1 pb-3">
+				<Tooltip delayDuration={100}>
+					<TooltipTrigger asChild>
+						<Button
+							variant="ghost"
+							size="icon"
+							className="h-10 w-10"
+							onClick={() => setCommandPaletteOpen(true)}
+						>
+							<Command className="h-5 w-5" />
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent side="right">Command Palette (⌘K)</TooltipContent>
+				</Tooltip>
+
+				<Tooltip delayDuration={100}>
+					<TooltipTrigger asChild>
+						<Button
+							variant="ghost"
+							size="icon"
+							className={cn(
+								"h-10 w-10 transition-all duration-200",
+								view === "settings" &&
+									"bg-accent/10 text-primary hover:bg-accent/10",
+							)}
+							onClick={() => setView("settings")}
+						>
+							<Settings className="h-5 w-5" />
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent side="right">Settings</TooltipContent>
+				</Tooltip>
+			</div>
 		</aside>
 	);
 }

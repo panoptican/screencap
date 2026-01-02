@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { IpcChannels, IpcEvents } from "../shared/ipc";
 import type {
+	AddictionStatsItem,
 	AppInfo,
 	AutomationStatus,
 	CaptureResult,
@@ -8,6 +9,7 @@ import type {
 	CaptureTriggerResult,
 	CategoryStats,
 	ClassificationResult,
+	ClearableStorageCategory,
 	ContextStatus,
 	ContextTestResult,
 	Event,
@@ -15,12 +17,18 @@ import type {
 	EventSummary,
 	GetEventsOptions,
 	GetTimelineFacetsOptions,
+	GitCommit,
 	LLMTestResult,
 	Memory,
+	OcrResult,
 	PeriodType,
 	PermissionStatus,
+	ProjectRepo,
+	ProjectStatsItem,
 	RecordedApp,
+	RepoWorkSession,
 	Settings,
+	StorageUsageBreakdown,
 	Story,
 	StoryInput,
 	TimelineFacets,
@@ -41,6 +49,8 @@ const api = {
 			ipcRenderer.invoke(IpcChannels.App.OpenExternal, url),
 		revealInFinder: (): Promise<void> =>
 			ipcRenderer.invoke(IpcChannels.App.RevealInFinder),
+		pickDirectory: (): Promise<string | null> =>
+			ipcRenderer.invoke(IpcChannels.App.PickDirectory),
 	},
 	update: {
 		getState: (): Promise<UpdateState> =>
@@ -60,6 +70,8 @@ const api = {
 	popup: {
 		setHeight: (height: number) =>
 			ipcRenderer.invoke(IpcChannels.Popup.SetHeight, height),
+		startProjectProgressCapture: (): Promise<void> =>
+			ipcRenderer.invoke(IpcChannels.Popup.StartProjectProgressCapture),
 	},
 
 	permissions: {
@@ -118,6 +130,14 @@ const api = {
 			ipcRenderer.invoke(IpcChannels.Storage.GetEvent, id),
 		getEventScreenshots: (eventId: string): Promise<EventScreenshot[]> =>
 			ipcRenderer.invoke(IpcChannels.Storage.GetEventScreenshots, eventId),
+		getDiskUsage: (): Promise<StorageUsageBreakdown> =>
+			ipcRenderer.invoke(IpcChannels.Storage.GetDiskUsage),
+		clearStorageCategory: (
+			category: ClearableStorageCategory,
+		): Promise<{ clearedBytes: number }> =>
+			ipcRenderer.invoke(IpcChannels.Storage.ClearStorageCategory, category),
+		revealStorageCategory: (category: string): Promise<void> =>
+			ipcRenderer.invoke(IpcChannels.Storage.RevealStorageCategory, category),
 		dismissEvents: (ids: string[]) =>
 			ipcRenderer.invoke(IpcChannels.Storage.DismissEvents, ids),
 		relabelEvents: (ids: string[], label: string) =>
@@ -128,6 +148,17 @@ const api = {
 			ipcRenderer.invoke(IpcChannels.Storage.RejectAddiction, ids),
 		setEventCaption: (id: string, caption: string) =>
 			ipcRenderer.invoke(IpcChannels.Storage.SetEventCaption, id, caption),
+		submitProjectProgressCapture: (input: {
+			id: string;
+			caption: string;
+			project: string | null;
+		}) =>
+			ipcRenderer.invoke(
+				IpcChannels.Storage.SubmitProjectProgressCapture,
+				input,
+			),
+		unmarkProjectProgress: (id: string): Promise<void> =>
+			ipcRenderer.invoke(IpcChannels.Storage.UnmarkProjectProgress, id),
 		deleteEvent: (id: string) =>
 			ipcRenderer.invoke(IpcChannels.Storage.DeleteEvent, id),
 		getMemories: (type?: string): Promise<Memory[]> =>
@@ -158,12 +189,54 @@ const api = {
 			ipcRenderer.invoke(IpcChannels.Storage.GetStories, periodType),
 		insertStory: (story: StoryInput) =>
 			ipcRenderer.invoke(IpcChannels.Storage.InsertStory, story),
+		getAddictionStatsBatch: (
+			names: string[],
+		): Promise<Record<string, AddictionStatsItem>> =>
+			ipcRenderer.invoke(IpcChannels.Storage.GetAddictionStatsBatch, names),
+		getProjectStatsBatch: (
+			names: string[],
+		): Promise<Record<string, ProjectStatsItem>> =>
+			ipcRenderer.invoke(IpcChannels.Storage.GetProjectStatsBatch, names),
 	},
 
 	settings: {
 		get: (): Promise<Settings> => ipcRenderer.invoke(IpcChannels.Settings.Get),
 		set: (settings: Settings) =>
 			ipcRenderer.invoke(IpcChannels.Settings.Set, settings),
+	},
+
+	shortcuts: {
+		setSuspended: (suspended: boolean): Promise<void> =>
+			ipcRenderer.invoke(IpcChannels.Shortcuts.SetSuspended, suspended),
+	},
+
+	projectJournal: {
+		listRepos: (projectName: string): Promise<ProjectRepo[]> =>
+			ipcRenderer.invoke(IpcChannels.ProjectJournal.ListRepos, projectName),
+		attachRepo: (projectName: string, path: string): Promise<ProjectRepo> =>
+			ipcRenderer.invoke(
+				IpcChannels.ProjectJournal.AttachRepo,
+				projectName,
+				path,
+			),
+		detachRepo: (repoId: string): Promise<void> =>
+			ipcRenderer.invoke(IpcChannels.ProjectJournal.DetachRepo, repoId),
+		getActivity: (options: {
+			projectName: string;
+			startAt: number;
+			endAt: number;
+			limitPerRepo?: number;
+		}): Promise<{
+			repos: ProjectRepo[];
+			commits: GitCommit[];
+			sessions: RepoWorkSession[];
+		}> => ipcRenderer.invoke(IpcChannels.ProjectJournal.GetActivity, options),
+		generateSummary: (options: {
+			projectName: string;
+			startAt: number;
+			endAt: number;
+		}): Promise<string> =>
+			ipcRenderer.invoke(IpcChannels.ProjectJournal.GenerateSummary, options),
 	},
 
 	llm: {
@@ -176,6 +249,13 @@ const api = {
 			ipcRenderer.invoke(IpcChannels.LLM.GenerateStory, events, periodType),
 		testConnection: (): Promise<LLMTestResult> =>
 			ipcRenderer.invoke(IpcChannels.LLM.TestConnection),
+		testLocalConnection: (): Promise<LLMTestResult> =>
+			ipcRenderer.invoke(IpcChannels.LLM.TestLocalConnection),
+	},
+
+	ocr: {
+		recognize: (imageBase64: string): Promise<OcrResult> =>
+			ipcRenderer.invoke(IpcChannels.Ocr.Recognize, imageBase64),
 	},
 
 	on: (channel: string, callback: (...args: unknown[]) => void) => {
@@ -200,7 +280,10 @@ export {
 	IpcEvents,
 	type Event,
 	type EventScreenshot,
+	type GitCommit,
 	type Memory,
+	type ProjectRepo,
+	type RepoWorkSession,
 	type Settings,
 	type Story,
 	type PermissionStatus,
@@ -210,6 +293,7 @@ export {
 	type EventSummary,
 	type PeriodType,
 	type LLMTestResult,
+	type OcrResult,
 	type CaptureResult,
 	type ClassificationResult,
 	type AutomationStatus,

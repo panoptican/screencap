@@ -28,6 +28,18 @@ export function formatRelativeTime(timestamp: number): string {
 	return "Just now";
 }
 
+export function formatDurationCompact(ms: number): string {
+	if (!Number.isFinite(ms) || ms <= 0) return "0m";
+	const minutesTotal = Math.floor(ms / 60_000);
+	if (minutesTotal <= 0) return "0m";
+	const days = Math.floor(minutesTotal / 1440);
+	const hours = Math.floor((minutesTotal % 1440) / 60);
+	const minutes = minutesTotal % 60;
+	if (days > 0) return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+	if (hours > 0) return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+	return `${minutes}m`;
+}
+
 export function formatDate(timestamp: number): string {
 	return new Date(timestamp).toLocaleDateString("en-US", {
 		weekday: "long",
@@ -42,6 +54,24 @@ export function formatTime(timestamp: number): string {
 		hour: "2-digit",
 		minute: "2-digit",
 	});
+}
+
+export function formatBytes(bytes: number): string {
+	if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+
+	const units = ["B", "KB", "MB", "GB", "TB"] as const;
+	let value = bytes;
+	let unitIndex = 0;
+
+	while (value >= 1024 && unitIndex < units.length - 1) {
+		value /= 1024;
+		unitIndex += 1;
+	}
+
+	const maximumFractionDigits =
+		unitIndex === 0 ? 0 : value >= 100 ? 0 : value >= 10 ? 1 : 2;
+
+	return `${new Intl.NumberFormat(undefined, { maximumFractionDigits }).format(value)} ${units[unitIndex]}`;
 }
 
 export function groupEventsByDate<T extends { timestamp: number }>(

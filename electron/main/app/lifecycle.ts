@@ -1,7 +1,9 @@
 import { app } from "electron";
+import { stopRepoMonitor } from "../features/projectJournal";
 import { stopQueueProcessor } from "../features/queue";
 import { stopRetentionService } from "../features/retention";
 import { stopScheduler } from "../features/scheduler";
+import { stopShortcuts } from "../features/shortcuts";
 import { closeDatabase } from "../infra/db";
 import { createLogger } from "../infra/log";
 import { destroyPopupWindow } from "./popup";
@@ -45,9 +47,11 @@ export function setupLifecycleHandlers(): void {
 		logger.info("App quitting...");
 		isQuitting = true;
 		destroyPopupWindow();
+		stopShortcuts();
 		stopScheduler();
 		stopRetentionService();
 		stopQueueProcessor();
+		stopRepoMonitor();
 		closeDatabase();
 	});
 }
@@ -58,5 +62,6 @@ export function performShutdown(): void {
 	stopScheduler();
 	stopRetentionService();
 	stopQueueProcessor();
+	stopRepoMonitor();
 	closeDatabase();
 }

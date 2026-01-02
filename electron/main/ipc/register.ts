@@ -4,10 +4,13 @@ import {
 	registerAppHandlers,
 	registerCaptureHandlers,
 	registerLLMHandlers,
+	registerOcrHandlers,
 	registerPermissionHandlers,
 	registerPopupHandlers,
+	registerProjectJournalHandlers,
 	registerSchedulerHandlers,
 	registerSettingsHandlers,
+	registerShortcutsHandlers,
 	registerStorageHandlers,
 	registerUpdateHandlers,
 	registerWindowHandlers,
@@ -34,7 +37,10 @@ export function registerAllHandlers(
 	registerSchedulerHandlers();
 	registerStorageHandlers();
 	registerSettingsHandlers();
+	registerShortcutsHandlers();
+	registerProjectJournalHandlers();
 	registerLLMHandlers();
+	registerOcrHandlers();
 	registerPopupHandlers();
 	registerUpdateHandlers();
 

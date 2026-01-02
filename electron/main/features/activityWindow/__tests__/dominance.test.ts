@@ -77,4 +77,3 @@ describe("computeDominantSegment", () => {
 		expect(dominant?.key).toBe("1::a");
 	});
 });
-

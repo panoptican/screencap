@@ -85,25 +85,6 @@ function fillSlotRange(
 	}
 }
 
-export function countCoveredSlots(events: Event[], dayStartMs: number): number {
-	const slotMs = SLOT_MINUTES * 60 * 1000;
-	const covered = new Set<number>();
-
-	for (const e of events) {
-		const startMs = e.timestamp;
-		const endMs = e.endTimestamp ?? e.timestamp;
-		const safeEndMs = Math.max(startMs, endMs);
-		const startIdx = Math.floor((startMs - dayStartMs) / slotMs);
-		const endIdx = Math.floor((safeEndMs - dayStartMs) / slotMs);
-		for (let idx = startIdx; idx <= endIdx; idx += 1) {
-			if (idx < 0 || idx >= SLOTS_PER_DAY) continue;
-			covered.add(idx);
-		}
-	}
-
-	return covered.size;
-}
-
 export function computeAddictionStreak(
 	events: Event[],
 	dayStartMs: number,
@@ -183,6 +164,12 @@ export function computeAddictionStreak(
 export function deltaTone(delta: number): DeltaTone {
 	if (delta > 0) return "up";
 	if (delta < 0) return "down";
+	return "neutral";
+}
+
+export function invertedDeltaTone(delta: number): DeltaTone {
+	if (delta > 0) return "down";
+	if (delta < 0) return "up";
 	return "neutral";
 }
 

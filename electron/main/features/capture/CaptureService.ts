@@ -1,4 +1,4 @@
-import { writeFileSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { desktopCapturer, screen } from "electron";
 import sharp from "sharp";
@@ -78,24 +78,30 @@ export async function captureAllDisplays(options?: {
 		const pngBuffer = nativeImage.toPNG();
 		logger.debug(`PNG buffer size: ${pngBuffer.length} bytes`);
 
+		const [original, thumbnail] = await Promise.all([
+			sharp(pngBuffer)
+				.resize(ORIGINAL_WIDTH, null, { withoutEnlargement: true })
+				.webp({ quality: WEBP_QUALITY })
+				.toBuffer(),
+			sharp(pngBuffer)
+				.resize(THUMBNAIL_WIDTH, null, { withoutEnlargement: true })
+				.webp({ quality: WEBP_QUALITY })
+				.toBuffer(),
+		]);
+
+		const writePromises: Promise<void>[] = [
+			writeFile(originalPath, original),
+			writeFile(thumbnailPath, thumbnail),
+		];
+
 		if (highResDisplayId && source.display_id === highResDisplayId) {
-			writeFileSync(highResPath, pngBuffer);
+			writePromises.push(writeFile(highResPath, pngBuffer));
 		}
 
-		const original = await sharp(pngBuffer)
-			.resize(ORIGINAL_WIDTH, null, { withoutEnlargement: true })
-			.webp({ quality: WEBP_QUALITY })
-			.toBuffer();
-
-		const thumbnail = await sharp(pngBuffer)
-			.resize(THUMBNAIL_WIDTH, null, { withoutEnlargement: true })
-			.webp({ quality: WEBP_QUALITY })
-			.toBuffer();
-
-		const fingerprint = await computeFingerprint(original);
-
-		writeFileSync(originalPath, original);
-		writeFileSync(thumbnailPath, thumbnail);
+		const [fingerprint] = await Promise.all([
+			computeFingerprint(original),
+			...writePromises,
+		]);
 
 		logger.debug("Saved files:", {
 			originalPath,

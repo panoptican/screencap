@@ -1,4 +1,3 @@
-import { z } from "zod";
 import { isSelfApp } from "../../../shared/appIdentity";
 import type { ClassificationResult } from "../../../shared/types";
 import { getMemories } from "../../infra/db/repositories/MemoryRepository";
@@ -11,45 +10,14 @@ import {
 	buildSystemPromptStage2,
 	type ScreenContext,
 } from "./prompts";
+import {
+	type ClassificationStage1,
+	ClassificationStage1Schema,
+	type ClassificationStage2,
+	ClassificationStage2Schema,
+} from "./schemas";
 
 const logger = createLogger({ scope: "ClassificationService" });
-
-const Stage1Schema = z.object({
-	category: z.enum(["Study", "Work", "Leisure", "Chores", "Social", "Unknown"]),
-	subcategories: z.array(z.string()),
-	project: z.string().nullable(),
-	project_progress: z.object({
-		shown: z.boolean(),
-		confidence: z.number().min(0).max(1),
-	}),
-	tags: z.array(z.string()),
-	confidence: z.number().min(0).max(1),
-	caption: z.string(),
-	addiction_triage: z.object({
-		tracking_enabled: z.boolean(),
-		potentially_addictive: z.boolean(),
-		candidates: z.array(
-			z.object({
-				addiction_id: z.string(),
-				likelihood: z.number().min(0).max(1),
-				evidence: z.array(z.string()),
-				rationale: z.string(),
-			}),
-		),
-	}),
-});
-
-type Stage1Result = z.infer<typeof Stage1Schema>;
-
-const Stage2Schema = z.object({
-	decision: z.enum(["none", "confirmed", "candidate"]),
-	addiction_id: z.string().nullable(),
-	confidence: z.number().min(0).max(1),
-	evidence: z.array(z.string()),
-	manual_prompt: z.string().nullable(),
-});
-
-type Stage2Result = z.infer<typeof Stage2Schema>;
 
 function resolveOption(
 	options: AddictionOption[],
@@ -61,8 +29,8 @@ function resolveOption(
 
 function normalizeProjectProgress(
 	project: string | null,
-	progress: Stage1Result["project_progress"],
-): Stage1Result["project_progress"] {
+	progress: ClassificationStage1["project_progress"],
+): ClassificationStage1["project_progress"] {
 	if (!project || !progress.shown) {
 		return { shown: false, confidence: 0 };
 	}
@@ -72,7 +40,7 @@ function normalizeProjectProgress(
 
 function normalizeStage2Decision(
 	candidates: AddictionOption[],
-	stage2: Stage2Result,
+	stage2: ClassificationStage2,
 ): {
 	confirmed: AddictionOption | null;
 	candidate: {
@@ -126,7 +94,7 @@ export async function classifyScreenshot(
 	const addictions = buildAddictionOptions(memories);
 	const isMetaAddictionScreen = shouldDisableAddictionTracking(context);
 
-	const stage1 = await callOpenRouter<Stage1Result>(
+	const stage1 = await callOpenRouter<ClassificationStage1>(
 		[
 			{
 				role: "system",
@@ -143,7 +111,7 @@ export async function classifyScreenshot(
 				],
 			},
 		],
-		Stage1Schema,
+		ClassificationStage1Schema,
 	);
 
 	const projectProgress = normalizeProjectProgress(
@@ -175,7 +143,7 @@ export async function classifyScreenshot(
 		: [];
 
 	if (trackingEnabled && candidates.length > 0) {
-		const stage2 = await callOpenRouter<Stage2Result>(
+		const stage2 = await callOpenRouter<ClassificationStage2>(
 			[
 				{
 					role: "system",
@@ -205,7 +173,7 @@ export async function classifyScreenshot(
 					],
 				},
 			],
-			Stage2Schema,
+			ClassificationStage2Schema,
 		);
 
 		const resolved = normalizeStage2Decision(candidates, stage2);

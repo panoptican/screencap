@@ -2,13 +2,14 @@
 
 Screen activity tracker for macOS with LLM-powered screenshot classification, project progress detection, and daily “Day Wrapped” journaling.
 
-Screencap is **local-first**: captures and metadata are stored on your machine in **SQLite + the filesystem**. Optionally, it can send a screenshot (and limited context) to an LLM via **OpenRouter** to classify what you were doing.
+Screencap is **local-first**: captures and metadata are stored on your machine in **SQLite + the filesystem**. Optionally, it can use OpenRouter (cloud) and/or a local HTTP model for classification. By default, cloud classification is **text-first** (context metadata + local OCR text). Screenshot uploads are only used when `allowVisionUploads = true`.
 
 ## Contents
 
 - [What it does](#what-it-does)
 - [How it works](#how-it-works)
 - [Configuration](#configuration)
+- [Local LLM](#local-llm)
 - [Project status / known gaps](#project-status--known-gaps)
 - [Privacy, networking, and data](#privacy-networking-and-data)
 - [Permissions (macOS)](#permissions-macos)
@@ -57,7 +58,6 @@ Screencap is **local-first**: captures and metadata are stored on your machine i
 - **Projects**: names the model is allowed to assign to events.
 - **Addictions**: strict rule definitions you want to track (used in a 2-stage addiction verification flow).
 - **Preferences**: classification hints / constraints.
-- **Corrections**: examples or notes to reduce repeated mistakes.
 
 ### Context detection (macOS)
 
@@ -110,10 +110,12 @@ High-level flow:
      - fingerprints are “similar” (stable + detail dHash thresholds)
    - Otherwise a new `events` row is created plus `event_screenshots` rows for each display.
    - For windowed scheduled events, the event time range is `windowStart → windowEnd`.
-6. **Queue for LLM**:
-   - the **primary display’s** “original” image is enqueued (`queue` table) for classification
+6. **Queue for AI**:
+   - the event is enqueued by id (`queue` table)
 7. **Queue processor** (every 10s):
-   - dequeues items and calls OpenRouter
+   - applies classification reuse cache by `(stableHash, contextKey)`
+   - runs local OCR (macOS Vision) and uses context metadata
+   - routes through providers (local retrieval → optional local LLM → optional cloud text → optional cloud vision)
    - updates the event with classification fields
    - deletes the high-res PNG if **project progress is not shown** (storage minimization)
 
@@ -132,7 +134,11 @@ Settings are stored in `settings.json` (under the app’s user data directory) a
 - `captureInterval`: capture interval (minutes). Used by the scheduler.
 - `retentionDays`: retention window (days). Events and screenshots older than this are automatically deleted.
 - `excludedApps`: apps excluded from **scheduled** capture (manual capture bypasses this).
-- `launchAtLogin`: launch at login toggle. Currently stored, but not enforced yet.
+- `launchAtLogin`: launch at login toggle.
+- `allowVisionUploads`: allow uploading screenshots for vision-based classification (default: `false`).
+- `localLlmEnabled`: enable local OpenAI-compatible provider (default: `false`).
+- `localLlmBaseUrl`: local base URL (default: `http://localhost:11434/v1`).
+- `localLlmModel`: local model id/name (default: `llama3.2`).
 
 ### Environment variables
 
@@ -146,11 +152,15 @@ The default OpenRouter model is currently hardcoded in `electron/main/features/l
 
 - `openai/gpt-5`
 
+## Local LLM
+
+Local LLM support is available via an OpenAI-compatible HTTP server (Ollama / LM Studio). See `docs/local-llm.md`.
+
 ## Project status / known gaps
 
 - **Platform support**: currently macOS-focused (AppleScript providers + macOS permission deep-links).
 - **Excluded apps**: enforced for scheduled captures; manual capture intentionally bypasses.
-- **Launch at login**: `launchAtLogin` exists in settings/UI, but the login item wiring is not implemented yet.
+- **Local vision**: local multimodal models are not used yet (local integration is text-only via OCR + context).
 
 ## Privacy, networking, and data
 
@@ -165,9 +175,10 @@ The default OpenRouter model is currently hardcoded in `electron/main/features/l
 Screencap makes network requests for:
 
 - **OpenRouter (LLM)**
-  - Classification: sends the screenshot image and may include prompt text containing:
-    - your **Memory** entries (projects, addictions, preferences, corrections)
+  - Classification (default): sends **text only** (context metadata + OCR text) and may include prompt text containing:
+    - your **Memory** entries (projects, addictions, preferences)
     - limited per-event **context** (app name, window title, URL host, content title)
+  - Classification (vision): sends the screenshot image only when `allowVisionUploads = true`
   - Journal generation: sends a text list of event summaries (time, caption, category, project/progress markers).
 - **Favicons**
   - downloads site icons (`http(s)` only) and caches them locally.
@@ -264,6 +275,14 @@ npm test
 
 Tests are written with Vitest and currently target the Electron-side logic (`electron/**/*.test.ts`).
 
+### Evaluation harness
+
+To compare classification strategies side-by-side on your local data:
+
+```bash
+npm run eval:classification -- --limit=25 --strategies=vision,text,local
+```
+
 ## Build & packaging
 
 ### Build bundles
@@ -310,7 +329,12 @@ Artifacts are output to `dist/`.
 ### OpenRouter errors / events stuck then “failed”
 
 - Add an OpenRouter API key in Settings and use “Test”.
-- If no API key is configured, queue processing will eventually mark events as `failed` after a few attempts.
+- If no API key is configured, events still complete using local providers (retrieval/baseline). Cloud providers are skipped.
+
+### OCR issues
+
+- OCR runs locally using macOS Vision and is used to power text-first classification (cloud text + local LLM).
+- Packaged builds bundle the OCR helper automatically. In development, OCR requires the helper binary at `build/ocr/screencap-ocr`.
 
 ### Native module install failures (`better-sqlite3`, `sharp`)
 

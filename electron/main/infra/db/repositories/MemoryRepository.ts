@@ -20,7 +20,10 @@ export function getMemories(type?: string): Memory[] {
 			.all() as RawMemoryRow[];
 	}
 
-	return transformRows<Memory>(rows);
+	return transformRows<Memory>(rows).filter(
+		(m) =>
+			m.type === "addiction" || m.type === "project" || m.type === "preference",
+	);
 }
 
 export function insertMemory(memory: Memory): void {

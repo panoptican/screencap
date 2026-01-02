@@ -1,4 +1,5 @@
 import {
+	AppWindow,
 	BookOpen,
 	Briefcase,
 	Gamepad2,
@@ -67,7 +68,11 @@ function areAppsEqual(
 ): boolean {
 	if (a.length !== b.length) return false;
 	for (let i = 0; i < a.length; i += 1) {
-		if (a[i].bundleId !== b[i].bundleId || a[i].name !== b[i].name)
+		if (
+			a[i].bundleId !== b[i].bundleId ||
+			a[i].name !== b[i].name ||
+			a[i].appIconPath !== b[i].appIconPath
+		)
 			return false;
 	}
 	return true;
@@ -175,6 +180,7 @@ export const TimelineFilters = memo(function TimelineFilters() {
 				({
 					bundleId: selectedAppBundleId,
 					name: null,
+					appIconPath: null,
 				} satisfies RecordedApp);
 			return [...facets.apps, selected].sort((a, b) =>
 				appLabel(a).localeCompare(appLabel(b), undefined, {
@@ -286,6 +292,16 @@ export const TimelineFilters = memo(function TimelineFilters() {
 			apps.map((a) => ({
 				value: a.bundleId,
 				label: appLabel(a),
+				icon: a.appIconPath ? (
+					<img
+						src={`local-file://${a.appIconPath}`}
+						alt=""
+						className="h-4 w-4 shrink-0 rounded-sm object-contain"
+						loading="lazy"
+					/>
+				) : (
+					<AppWindow className="h-4 w-4" />
+				),
 			})),
 		[apps],
 	);
@@ -335,6 +351,15 @@ export const TimelineFilters = memo(function TimelineFilters() {
 			result.push({
 				key: "app",
 				label: app ? appLabel(app) : filters.appBundleId,
+				icon: app?.appIconPath ? (
+					<img
+						src={`local-file://${app.appIconPath}`}
+						alt=""
+						className="h-3 w-3 shrink-0 rounded-sm object-contain"
+					/>
+				) : (
+					<AppWindow className="h-3 w-3" />
+				),
 				onRemove: () => updateFilters({ appBundleId: undefined }),
 			});
 		}

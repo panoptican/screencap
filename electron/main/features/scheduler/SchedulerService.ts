@@ -87,7 +87,7 @@ async function runWindowedCaptureCycle(): Promise<CaptureTriggerResult> {
 		const idleTime = powerMonitor.getSystemIdleTime();
 		const windowEnd = Date.now();
 
-		logger.debug("Windowed capture cycle", {
+		logger.info("Scheduled capture starting", {
 			hasPermission,
 			idleTimeSeconds: idleTime,
 		});
@@ -101,13 +101,16 @@ async function runWindowedCaptureCycle(): Promise<CaptureTriggerResult> {
 
 		if (idleTime > IDLE_SKIP_SECONDS) {
 			const idleStartAt = windowEnd - idleTime * 1000;
-			logger.debug(`System idle for ${idleTime}s, finalizing before idle`, {
+			logger.info(`System idle for ${idleTime}s, finalizing before idle`, {
 				idleStartAt,
 			});
 
 			const windowed = await finalizeActivityWindow(idleStartAt);
 			await discardActivityWindow(windowEnd);
 			if (windowed.kind !== "capture") {
+				logger.info("Scheduled capture skipped (idle)", {
+					reason: windowed.reason,
+				});
 				return { merged: false, eventId: null };
 			}
 			return await processCapturedWindow(windowed);
@@ -115,8 +118,12 @@ async function runWindowedCaptureCycle(): Promise<CaptureTriggerResult> {
 
 		const windowed = await finalizeActivityWindow(windowEnd);
 		if (windowed.kind !== "capture") {
+			logger.info("Scheduled capture skipped", { reason: windowed.reason });
 			return { merged: false, eventId: null };
 		}
+		logger.info("Scheduled capture completed", {
+			captures: windowed.captures.length,
+		});
 		return await processCapturedWindow(windowed);
 	} finally {
 		releaseLock();
@@ -173,16 +180,6 @@ async function runCaptureCycle(
 		if (reason === "scheduled" && context) {
 			const settings = getSettings();
 
-			if (
-				context.app.bundleId &&
-				settings.excludedApps.includes(context.app.bundleId)
-			) {
-				logger.debug("App is in excludedApps, skipping scheduled capture", {
-					bundleId: context.app.bundleId,
-				});
-				return { merged: false, eventId: null };
-			}
-
 			const policy = evaluateAutomationPolicy(
 				{
 					appBundleId: context.app.bundleId,
@@ -217,11 +214,17 @@ async function runCaptureCycle(
 			return { merged: false, eventId: null };
 		}
 
+		const isProjectProgressIntent =
+			reason === "manual" && options?.intent === "project_progress";
+		const deferLlmQueue = isProjectProgressIntent;
+
 		const result = await processCaptureGroup({
 			captures,
 			intervalMs,
 			primaryDisplayId,
 			context,
+			enqueueToLlmQueue: !deferLlmQueue,
+			allowMerge: !isProjectProgressIntent,
 		});
 
 		if (
@@ -253,6 +256,7 @@ async function tick(): Promise<void> {
 		return;
 	}
 
+	logger.info("Scheduler tick");
 	await runWindowedCaptureCycle();
 }
 

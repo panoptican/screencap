@@ -69,6 +69,12 @@ export function createTables(db: Database.Database): void {
       updated_at INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS app_icons (
+      bundle_id TEXT PRIMARY KEY,
+      path TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS memory (
       id TEXT PRIMARY KEY,
       type TEXT NOT NULL,
@@ -81,9 +87,9 @@ export function createTables(db: Database.Database): void {
     CREATE TABLE IF NOT EXISTS queue (
       id TEXT PRIMARY KEY,
       event_id TEXT NOT NULL,
-      image_data TEXT NOT NULL,
       attempts INTEGER DEFAULT 0,
       created_at INTEGER NOT NULL,
+      next_attempt_at INTEGER NOT NULL,
       FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
     );
 
@@ -94,6 +100,33 @@ export function createTables(db: Database.Database): void {
       period_end INTEGER NOT NULL,
       content TEXT NOT NULL,
       created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS project_repos (
+      id TEXT PRIMARY KEY,
+      project_key TEXT NOT NULL,
+      project_name TEXT NOT NULL,
+      repo_root TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      UNIQUE(project_key, repo_root)
+    );
+
+    CREATE TABLE IF NOT EXISTS repo_work_sessions (
+      id TEXT PRIMARY KEY,
+      project_repo_id TEXT NOT NULL,
+      project_key TEXT NOT NULL,
+      project_name TEXT NOT NULL,
+      repo_root TEXT NOT NULL,
+      branch TEXT,
+      head_sha TEXT,
+      start_at INTEGER NOT NULL,
+      end_at INTEGER NOT NULL,
+      is_open INTEGER NOT NULL DEFAULT 1,
+      max_insertions INTEGER NOT NULL DEFAULT 0,
+      max_deletions INTEGER NOT NULL DEFAULT 0,
+      files_json TEXT NOT NULL DEFAULT '[]',
+      updated_at INTEGER NOT NULL,
+      FOREIGN KEY (project_repo_id) REFERENCES project_repos(id) ON DELETE CASCADE
     );
   `);
 
@@ -114,11 +147,19 @@ export function createIndexes(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_events_url_host ON events(url_host);
     CREATE INDEX IF NOT EXISTS idx_events_content_kind ON events(content_kind);
     CREATE INDEX IF NOT EXISTS idx_events_context_key ON events(context_key);
+    CREATE INDEX IF NOT EXISTS idx_events_stable_hash_context_key ON events(stable_hash, context_key);
     CREATE INDEX IF NOT EXISTS idx_event_screenshots_event_id ON event_screenshots(event_id);
     CREATE INDEX IF NOT EXISTS idx_event_screenshots_event_primary ON event_screenshots(event_id, is_primary);
     CREATE INDEX IF NOT EXISTS idx_favicons_updated_at ON favicons(updated_at);
+    CREATE INDEX IF NOT EXISTS idx_app_icons_updated_at ON app_icons(updated_at);
     CREATE INDEX IF NOT EXISTS idx_memory_type ON memory(type);
     CREATE INDEX IF NOT EXISTS idx_queue_created ON queue(created_at);
+    CREATE INDEX IF NOT EXISTS idx_queue_next_attempt ON queue(next_attempt_at);
+    CREATE INDEX IF NOT EXISTS idx_project_repos_project_key ON project_repos(project_key);
+    CREATE INDEX IF NOT EXISTS idx_project_repos_repo_root ON project_repos(repo_root);
+    CREATE INDEX IF NOT EXISTS idx_repo_work_sessions_project_key_start ON repo_work_sessions(project_key, start_at);
+    CREATE INDEX IF NOT EXISTS idx_repo_work_sessions_repo_start ON repo_work_sessions(project_repo_id, start_at);
+    CREATE INDEX IF NOT EXISTS idx_repo_work_sessions_open ON repo_work_sessions(is_open);
   `);
 
 	logger.info("Indexes created");

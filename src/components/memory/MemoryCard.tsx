@@ -1,4 +1,5 @@
 import { Check, Pencil, Trash2, X } from "lucide-react";
+import type { ReactNode } from "react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +15,7 @@ interface MemoryCardProps {
 	) => Promise<void>;
 	onDelete: (id: string) => Promise<void>;
 	readOnly?: boolean;
+	footer?: ReactNode;
 }
 
 export function MemoryCard({
@@ -21,6 +23,7 @@ export function MemoryCard({
 	onEdit,
 	onDelete,
 	readOnly,
+	footer,
 }: MemoryCardProps) {
 	const [isEditing, setIsEditing] = useState(false);
 	const [content, setContent] = useState(memory.content);
@@ -30,7 +33,7 @@ export function MemoryCard({
 		if (content.trim()) {
 			await onEdit(memory.id, {
 				content: content.trim(),
-				...(memory.type === "addiction"
+				...(memory.type === "addiction" || memory.type === "project"
 					? { description: description.trim() || null }
 					: {}),
 			});
@@ -52,7 +55,7 @@ export function MemoryCard({
 		<div className="group p-4 rounded-lg border border-border bg-card hover:border-primary/30 transition-colors">
 			{isEditing ? (
 				<div className="space-y-3">
-					{memory.type === "addiction" ? (
+					{memory.type === "addiction" || memory.type === "project" ? (
 						<div className="space-y-3">
 							<Input
 								value={content}
@@ -63,7 +66,11 @@ export function MemoryCard({
 								value={description}
 								onChange={(e) => setDescription(e.target.value)}
 								className="min-h-[80px] resize-none"
-								placeholder="About (optional)"
+								placeholder={
+									memory.type === "addiction"
+										? "About (optional)"
+										: "Notes (optional)"
+								}
 							/>
 						</div>
 					) : (
@@ -86,44 +93,48 @@ export function MemoryCard({
 					</div>
 				</div>
 			) : (
-				<div className="flex items-start gap-3">
-					<div className="flex-1">
-						{memory.type === "addiction" ? (
-							<div className="space-y-1">
-								<p className="text-sm font-medium">{memory.content}</p>
-								{memory.description && (
-									<p className="text-xs text-muted-foreground whitespace-pre-wrap">
-										{memory.description}
-									</p>
-								)}
-							</div>
-						) : (
-							<p className="text-sm">{memory.content}</p>
-						)}
-						<p className="text-xs text-muted-foreground mt-2">
-							{formatRelativeTime(memory.updatedAt)}
-						</p>
-					</div>
-					{!readOnly && (
-						<div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity -mt-2 -mr-2">
-							<Button
-								size="icon"
-								variant="ghost"
-								className="size-6"
-								onClick={() => setIsEditing(true)}
-							>
-								<Pencil className="size-2.5" />
-							</Button>
-							<Button
-								size="icon"
-								variant="ghost"
-								className="size-6 text-destructive hover:text-destructive"
-								onClick={handleDelete}
-							>
-								<Trash2 className="size-2.5" />
-							</Button>
+				<div className="space-y-3">
+					<div className="flex items-start gap-3">
+						<div className="flex-1">
+							{memory.type === "addiction" || memory.type === "project" ? (
+								<div className="space-y-1">
+									<p className="text-sm font-medium">{memory.content}</p>
+									{memory.description && (
+										<p className="text-xs text-muted-foreground whitespace-pre-wrap">
+											{memory.description}
+										</p>
+									)}
+								</div>
+							) : (
+								<p className="text-sm">{memory.content}</p>
+							)}
+							<p className="text-xs text-muted-foreground mt-2">
+								{formatRelativeTime(memory.updatedAt)}
+							</p>
 						</div>
-					)}
+						{!readOnly && (
+							<div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity -mt-2 -mr-2">
+								<Button
+									size="icon"
+									variant="ghost"
+									className="size-6"
+									onClick={() => setIsEditing(true)}
+								>
+									<Pencil className="size-2.5" />
+								</Button>
+								<Button
+									size="icon"
+									variant="ghost"
+									className="size-6 text-destructive hover:text-destructive"
+									onClick={handleDelete}
+								>
+									<Trash2 className="size-2.5" />
+								</Button>
+							</div>
+						)}
+					</div>
+
+					{footer}
 				</div>
 			)}
 		</div>

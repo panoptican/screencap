@@ -7,6 +7,30 @@ const logger = createLogger({ scope: "OpenRouterClient" });
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 const DEFAULT_MODEL = "openai/gpt-5";
 
+export type OpenRouterCallRecord = {
+	timestamp: number;
+	kind: "json" | "raw" | "test";
+	model: string;
+	status: number;
+};
+
+let callRecords: OpenRouterCallRecord[] = [];
+
+function recordCall(record: OpenRouterCallRecord): void {
+	callRecords.push(record);
+	if (callRecords.length > 5000) {
+		callRecords = callRecords.slice(callRecords.length - 5000);
+	}
+}
+
+export function resetOpenRouterCallRecords(): void {
+	callRecords = [];
+}
+
+export function getOpenRouterCallRecords(): readonly OpenRouterCallRecord[] {
+	return callRecords;
+}
+
 export interface OpenRouterOptions {
 	maxTokens?: number;
 	temperature?: number;
@@ -61,6 +85,13 @@ export async function callOpenRouter<T>(
 		body: JSON.stringify(body),
 	});
 
+	recordCall({
+		timestamp: Date.now(),
+		kind: "json",
+		model: String(body.model ?? DEFAULT_MODEL),
+		status: response.status,
+	});
+
 	if (!response.ok) {
 		const error = await response.text();
 		logger.error("OpenRouter API error:", { status: response.status, error });
@@ -101,6 +132,13 @@ export async function callOpenRouterRaw(
 		body: JSON.stringify(body),
 	});
 
+	recordCall({
+		timestamp: Date.now(),
+		kind: "raw",
+		model: String(body.model ?? DEFAULT_MODEL),
+		status: response.status,
+	});
+
 	if (!response.ok) {
 		const error = await response.text();
 		logger.error("OpenRouter API error:", { status: response.status, error });
@@ -133,6 +171,13 @@ export async function testConnection(): Promise<{
 				model: DEFAULT_MODEL,
 				messages: [{ role: "user", content: "Hello" }],
 			}),
+		});
+
+		recordCall({
+			timestamp: Date.now(),
+			kind: "test",
+			model: DEFAULT_MODEL,
+			status: response.status,
 		});
 
 		if (response.ok) {
