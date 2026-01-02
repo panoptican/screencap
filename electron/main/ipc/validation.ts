@@ -31,6 +31,7 @@ export const ipcCaptureTriggerArgs = z.union([
 		z
 			.object({
 				intent: z.enum(["default", "project_progress"]).optional(),
+				includeSenderWindow: z.boolean().optional(),
 			})
 			.strict(),
 	]),

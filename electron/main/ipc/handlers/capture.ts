@@ -51,6 +51,7 @@ export function registerCaptureHandlers(): void {
 			options?: CaptureTriggerOptions,
 		): Promise<CaptureTriggerResult> => {
 			const intent = options?.intent ?? "default";
+			const includeSenderWindow = options?.includeSenderWindow ?? false;
 
 			logger.info("Manual capture triggered via IPC", { intent });
 
@@ -65,6 +66,7 @@ export function registerCaptureHandlers(): void {
 				shouldRestoreSender && senderWindow.isFocused();
 
 			if (
+				!includeSenderWindow &&
 				senderWindow &&
 				!senderWindow.isDestroyed() &&
 				senderWindow.isVisible()
@@ -80,6 +82,7 @@ export function registerCaptureHandlers(): void {
 				});
 			} finally {
 				if (
+					!includeSenderWindow &&
 					senderWindow &&
 					shouldRestoreSender &&
 					!senderWindow.isDestroyed()

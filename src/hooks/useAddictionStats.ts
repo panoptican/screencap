@@ -40,7 +40,8 @@ export function useAddictionStats(addictionNames: string[]) {
 
 		setIsLoading(true);
 
-		const batch = await window.api.storage.getAddictionStatsBatch(addictionNames);
+		const batch =
+			await window.api.storage.getAddictionStatsBatch(addictionNames);
 
 		const next: Record<string, AddictionStats> = {};
 		for (const name of addictionNames) {

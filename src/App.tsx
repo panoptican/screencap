@@ -3,6 +3,7 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { PermissionDialog } from "@/components/dialogs/PermissionDialog";
 import { AppBackdrop } from "@/components/layout/AppBackdrop";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { Titlebar } from "@/components/layout/Titlebar";
 import { AddictionsView } from "@/components/memory/AddictionsView";
 import { ProjectsView } from "@/components/memory/ProjectsView";
 import { OnboardingWizard } from "@/components/onboarding";
@@ -86,17 +87,20 @@ export default function App() {
 
 	return (
 		<TooltipProvider>
-			<div className="relative flex h-screen overflow-hidden bg-background">
+			<div className="relative flex h-screen flex-col overflow-hidden bg-background">
 				<AppBackdrop />
-				<Sidebar />
-				<main className="relative flex-1 overflow-hidden">
-					{view === "timeline" && <Timeline />}
-					{view === "progress" && <ProjectProgressView />}
-					{view === "story" && <StoryView />}
-					{view === "projects" && <ProjectsView />}
-					{view === "addictions" && <AddictionsView />}
-					{view === "settings" && <SettingsView />}
-				</main>
+				<Titlebar />
+				<div className="flex min-h-0 flex-1 overflow-hidden">
+					<Sidebar />
+					<main className="relative flex-1 overflow-hidden rounded-tl-xl border-l border-t border-border">
+						{view === "timeline" && <Timeline />}
+						{view === "progress" && <ProjectProgressView />}
+						{view === "story" && <StoryView />}
+						{view === "projects" && <ProjectsView />}
+						{view === "addictions" && <AddictionsView />}
+						{view === "settings" && <SettingsView />}
+					</main>
+				</div>
 				{showPermissionDialog && (
 					<PermissionDialog onDismiss={() => setShowPermissionDialog(false)} />
 				)}

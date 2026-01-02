@@ -1,12 +1,4 @@
-import {
-	BookOpen,
-	Briefcase,
-	Clock,
-	Command,
-	Flame,
-	Settings,
-	TrendingUp,
-} from "lucide-react";
+import { Command } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
 	Tooltip,
@@ -15,21 +7,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/stores/app";
-import type { View } from "@/types";
-
-interface NavItem {
-	id: View;
-	icon: React.ComponentType<{ className?: string }>;
-	label: string;
-}
-
-const navItems: NavItem[] = [
-	{ id: "timeline", icon: Clock, label: "Timeline" },
-	{ id: "progress", icon: TrendingUp, label: "Progress" },
-	{ id: "story", icon: BookOpen, label: "Journal" },
-	{ id: "projects", icon: Briefcase, label: "Projects" },
-	{ id: "addictions", icon: Flame, label: "Addictions" },
-];
+import { appNavItems } from "./navigation";
 
 export function Sidebar() {
 	const view = useAppStore((s) => s.view);
@@ -37,17 +15,16 @@ export function Sidebar() {
 	const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen);
 
 	return (
-		<aside className="relative w-[68px] border-r border-border flex flex-col items-center bg-card/50">
-			<div className="h-10 w-full shrink-0 drag-region" />
-			<nav className="flex flex-col gap-1 pt-2">
-				{navItems.map((item) => (
+		<aside className="relative px-2 shrink-0 flex flex-col items-center bg-card/50">
+			<nav className="flex flex-col gap-1 pt-1">
+				{appNavItems.map((item) => (
 					<Tooltip key={item.id} delayDuration={100}>
 						<TooltipTrigger asChild>
 							<Button
 								variant="ghost"
 								size="icon"
 								className={cn(
-									"h-10 w-10 transition-all duration-200",
+									"w-8 h-8 transition-all duration-200",
 									view === item.id &&
 										"bg-accent/10 text-primary hover:bg-accent/10",
 								)}
@@ -69,31 +46,13 @@ export function Sidebar() {
 						<Button
 							variant="ghost"
 							size="icon"
-							className="h-10 w-10"
+							className="w-8 h-8"
 							onClick={() => setCommandPaletteOpen(true)}
 						>
 							<Command className="h-5 w-5" />
 						</Button>
 					</TooltipTrigger>
 					<TooltipContent side="right">Command Palette (⌘K)</TooltipContent>
-				</Tooltip>
-
-				<Tooltip delayDuration={100}>
-					<TooltipTrigger asChild>
-						<Button
-							variant="ghost"
-							size="icon"
-							className={cn(
-								"h-10 w-10 transition-all duration-200",
-								view === "settings" &&
-									"bg-accent/10 text-primary hover:bg-accent/10",
-							)}
-							onClick={() => setView("settings")}
-						>
-							<Settings className="h-5 w-5" />
-						</Button>
-					</TooltipTrigger>
-					<TooltipContent side="right">Settings</TooltipContent>
 				</Tooltip>
 			</div>
 		</aside>

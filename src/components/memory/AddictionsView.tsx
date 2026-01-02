@@ -87,7 +87,7 @@ export function AddictionsView() {
 
 	return (
 		<div className="h-full flex flex-col">
-			<div className="drag-region flex border-b border-border p-2 px-4 justify-between">
+			<div className="drag-region flex border-b border-border p-2 px-4 justify-between items-center">
 				<div className="flex flex-col">
 					<h1 className="text-lg font-semibold">Addictions</h1>
 					<p className="text-sm text-muted-foreground">
@@ -97,8 +97,8 @@ export function AddictionsView() {
 
 				<div className="flex items-center gap-2 no-drag pt-2">
 					<Button onClick={() => setAddDialogOpen(true)} size="sm">
-						<Plus className="h-4 w-4 mr-2" />
-						Add
+						<Plus className="size-3.5" />
+						Track new addiction
 					</Button>
 				</div>
 			</div>

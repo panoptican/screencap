@@ -212,6 +212,7 @@ export type CaptureIntent = "default" | "project_progress";
 
 export interface CaptureTriggerOptions {
 	intent?: CaptureIntent;
+	includeSenderWindow?: boolean;
 }
 
 export interface CaptureTriggerResult {

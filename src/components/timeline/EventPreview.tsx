@@ -52,6 +52,7 @@ import {
 	updatesForBehavior,
 } from "@/lib/automationRules";
 import { copyBestImage } from "@/lib/copyImage";
+import { isNsfwEvent } from "@/lib/nsfw";
 import { cn, formatDate, formatTime, getCategoryColor } from "@/lib/utils";
 import { useAppStore } from "@/stores/app";
 import type { AutomationRule, Event, EventScreenshot, Settings } from "@/types";
@@ -91,6 +92,18 @@ function highResPathFromLowResPath(
 	return path.replace(/\.webp$/, ".hq.png");
 }
 
+function parseStringArrayJson(value: string | null): string[] {
+	if (!value) return [];
+	try {
+		const parsed = JSON.parse(value);
+		return Array.isArray(parsed)
+			? parsed.filter((v): v is string => typeof v === "string")
+			: [];
+	} catch {
+		return [];
+	}
+}
+
 interface EventPreviewProps {
 	event: Event;
 	open: boolean;
@@ -122,12 +135,24 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 	const removeEvent = useAppStore((s) => s.removeEvent);
 	const updateEvent = useAppStore((s) => s.updateEvent);
 
-	const tags = event.tags ? JSON.parse(event.tags) : [];
-	const subcategories = event.subcategories
-		? JSON.parse(event.subcategories)
-		: [];
-	const isNsfw = tags.some((tag: string) =>
-		["nsfw", "porn"].includes(tag.toLowerCase()),
+	const tags = parseStringArrayJson(event.tags);
+	const subcategories = parseStringArrayJson(event.subcategories);
+	const isNsfw = useMemo(
+		() =>
+			isNsfwEvent({
+				tags: event.tags,
+				urlHost: event.urlHost,
+				urlCanonical: event.urlCanonical,
+				contentTitle: event.contentTitle,
+				windowTitle: event.windowTitle,
+			}),
+		[
+			event.tags,
+			event.urlHost,
+			event.urlCanonical,
+			event.contentTitle,
+			event.windowTitle,
+		],
 	);
 	const background = useMemo(() => parseBackgroundFromEvent(event), [event]);
 	const endTimestamp = event.endTimestamp ?? event.timestamp;

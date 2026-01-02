@@ -18,6 +18,7 @@ import {
 	ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { copyBestImage } from "@/lib/copyImage";
+import { isNsfwEvent } from "@/lib/nsfw";
 import { cn, formatTime } from "@/lib/utils";
 import { useAppStore } from "@/stores/app";
 import type { Event } from "@/types";
@@ -93,21 +94,22 @@ export const EventCard = memo(function EventCard({
 	const removeEvent = useAppStore((s) => s.removeEvent);
 	const [showPreview, setShowPreview] = useState(false);
 
-	const tags = useMemo(() => {
-		if (!event.tags) return [] as string[];
-		try {
-			const parsed = JSON.parse(event.tags);
-			return Array.isArray(parsed)
-				? parsed.filter((v): v is string => typeof v === "string")
-				: [];
-		} catch {
-			return [] as string[];
-		}
-	}, [event.tags]);
-
 	const isNsfw = useMemo(
-		() => tags.some((tag) => ["nsfw", "porn"].includes(tag.toLowerCase())),
-		[tags],
+		() =>
+			isNsfwEvent({
+				tags: event.tags,
+				urlHost: event.urlHost,
+				urlCanonical: event.urlCanonical,
+				contentTitle: event.contentTitle,
+				windowTitle: event.windowTitle,
+			}),
+		[
+			event.tags,
+			event.urlHost,
+			event.urlCanonical,
+			event.contentTitle,
+			event.windowTitle,
+		],
 	);
 
 	const background = useMemo(() => parseBackgroundFromEvent(event), [event]);

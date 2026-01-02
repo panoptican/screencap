@@ -84,8 +84,8 @@ export function ProjectsView() {
 
 				<div className="flex items-center gap-2 no-drag pt-2">
 					<Button onClick={() => setAddDialogOpen(true)} size="sm">
-						<Plus className="h-4 w-4 mr-2" />
-						Add
+						<Plus className="size-3.5" />
+						Track new project
 					</Button>
 				</div>
 			</div>

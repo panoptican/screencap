@@ -50,6 +50,25 @@ const aiRouter = createAiRouter([
 	openRouterVisionProvider,
 ]);
 
+function includesPornTag(tags: string[]): boolean {
+	return tags.some((tag) => {
+		const t = tag.trim().toLowerCase();
+		return t === "porn" || t === "nsfw";
+	});
+}
+
+function parseStringArrayJson(value: string | null): string[] {
+	if (!value) return [];
+	try {
+		const parsed = JSON.parse(value);
+		return Array.isArray(parsed)
+			? parsed.filter((v): v is string => typeof v === "string")
+			: [];
+	} catch {
+		return [];
+	}
+}
+
 function buildProviderContext(
 	settings: ReturnType<typeof getSettings>,
 ): ClassificationProviderContext {
@@ -245,6 +264,10 @@ async function processQueueItem(item: {
 					? (latest?.caption ?? null)
 					: (cached.caption ?? buildFallbackCaption(event));
 
+				if (includesPornTag(parseStringArrayJson(tagsJson))) {
+					category = "Leisure";
+				}
+
 				if (policy.overrides.category) {
 					category = policy.overrides.category;
 				}
@@ -402,6 +425,10 @@ async function processQueueItem(item: {
 
 			let category = result.category;
 			let tags = result.tags;
+
+			if (includesPornTag(tags)) {
+				category = "Leisure";
+			}
 
 			if (policy.overrides.category) {
 				category = policy.overrides.category;

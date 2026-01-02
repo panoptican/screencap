@@ -5,26 +5,27 @@ import {
 	ArrowRight,
 	Check,
 	ExternalLink,
-	Eye,
 	Loader2,
-	Lock,
-	Monitor,
 	RefreshCw,
-	Shield,
-	Sparkles,
 	X,
-	Zap,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { AsciiLogo } from "@/components/onboarding/AsciiLogo";
 import { MatrixBorder } from "@/components/onboarding/MatrixBorder";
+import { StampStatus } from "@/components/onboarding/StampStatus";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 import { useSettings } from "@/hooks/useSettings";
 import { cn } from "@/lib/utils";
-import type { AppInfo, LLMTestResult } from "@/types";
+import type {
+	AppInfo,
+	Event,
+	EventScreenshot,
+	LLMTestResult,
+	Settings,
+} from "@/types";
 
 const ease = [0.25, 0.1, 0.25, 1] as const;
 
@@ -154,8 +155,7 @@ type OnboardingStep =
 	| "accessibility"
 	| "automation"
 	| "ai-choice"
-	| "privacy"
-	| "finish";
+	| "review";
 
 const STEPS: OnboardingStep[] = [
 	"welcome",
@@ -163,8 +163,7 @@ const STEPS: OnboardingStep[] = [
 	"accessibility",
 	"automation",
 	"ai-choice",
-	"privacy",
-	"finish",
+	"review",
 ];
 
 interface OnboardingWizardProps {
@@ -174,8 +173,13 @@ interface OnboardingWizardProps {
 export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
 	const [step, setStep] = useState<OnboardingStep>("welcome");
 	const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
-	const { settings, updateSetting, saveSettings } = useSettings();
+	const { settings, saveSettings } = useSettings();
 	const status = useOnboardingStatus(1500);
+	const [pendingCompletionSettings, setPendingCompletionSettings] =
+		useState<Settings | null>(null);
+	const [sampleEventId, setSampleEventId] = useState<string | null>(null);
+	const [isCapturingSample, setIsCapturingSample] = useState(false);
+	const [autoCaptureAttempted, setAutoCaptureAttempted] = useState(false);
 
 	useEffect(() => {
 		window.api?.app.getInfo().then(setAppInfo);
@@ -197,16 +201,55 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
 		}
 	}, [currentIndex]);
 
-	const handleComplete = useCallback(async () => {
-		await saveSettings({
-			...settings,
-			onboarding: {
-				version: settings.onboarding.version,
-				completedAt: Date.now(),
-			},
-		});
-		onComplete();
-	}, [settings, saveSettings, onComplete]);
+	const handleComplete = useCallback(
+		async (baseSettings: Settings) => {
+			const nextSettings: Settings = {
+				...baseSettings,
+				onboarding: {
+					version: baseSettings.onboarding.version,
+					completedAt: Date.now(),
+				},
+			};
+			await saveSettings(nextSettings);
+			if (status.canCapture) {
+				await window.api?.scheduler.start(nextSettings.captureInterval);
+			}
+			onComplete();
+		},
+		[saveSettings, status.canCapture, onComplete],
+	);
+
+	const captureSample = useCallback(async (): Promise<string | null> => {
+		if (isCapturingSample) return sampleEventId;
+		setIsCapturingSample(true);
+		try {
+			const result = await window.api.capture.trigger({
+				includeSenderWindow: true,
+			});
+			const nextEventId = result.eventId ?? null;
+			setSampleEventId(nextEventId);
+			return nextEventId;
+		} catch {
+			return null;
+		} finally {
+			setIsCapturingSample(false);
+		}
+	}, [isCapturingSample, sampleEventId]);
+
+	useEffect(() => {
+		if (step !== "screen-recording") return;
+		if (autoCaptureAttempted) return;
+		if (status.screenCaptureStatus !== "granted") return;
+		if (sampleEventId) return;
+		setAutoCaptureAttempted(true);
+		void captureSample();
+	}, [
+		autoCaptureAttempted,
+		captureSample,
+		sampleEventId,
+		status.screenCaptureStatus,
+		step,
+	]);
 
 	return (
 		<div className="fixed inset-0 z-50 flex flex-col bg-background">
@@ -217,12 +260,13 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
 					className="h-0 overflow-hidden px-0 pt-0 pb-0 opacity-0 pointer-events-none"
 				/>
 				<ScrollArea className="flex-1">
-					<div className="relative max-w-2xl mx-auto px-6 py-8">
+					<div className="relative max-w-2xl mx-auto px-6 py-8 min-h-full flex flex-col justify-center">
 						{step === "welcome" && <WelcomeStep onNext={goNext} />}
 						{step === "screen-recording" && (
 							<ScreenRecordingStep
 								status={status.screenCaptureStatus}
 								isPackaged={appInfo?.isPackaged ?? false}
+								isCapturingSample={isCapturingSample}
 								onNext={goNext}
 								onRefresh={status.refresh}
 								onBack={goBack}
@@ -247,25 +291,26 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
 						)}
 						{step === "ai-choice" && (
 							<AIChoiceStep
-								apiKey={settings.apiKey}
-								llmEnabled={settings.llmEnabled}
-								onApiKeyChange={(key) => updateSetting("apiKey", key)}
-								onLlmEnabledChange={(enabled) =>
-									updateSetting("llmEnabled", enabled)
-								}
-								onNext={goNext}
+								settings={settings}
+								saveSettings={saveSettings}
 								onBack={goBack}
+								onNext={async (next) => {
+									setPendingCompletionSettings(next);
+									goNext();
+								}}
 							/>
 						)}
-						{step === "privacy" && (
-							<PrivacyStep onNext={goNext} onBack={goBack} />
-						)}
-						{step === "finish" && (
-							<FinishStep
-								status={status}
-								llmEnabled={settings.llmEnabled}
-								onComplete={handleComplete}
+						{step === "review" && (
+							<ReviewStep
+								eventId={sampleEventId}
+								isCapturingSample={isCapturingSample}
+								onRetake={async () => {
+									await captureSample();
+								}}
 								onBack={goBack}
+								onFinish={async () => {
+									await handleComplete(pendingCompletionSettings ?? settings);
+								}}
 							/>
 						)}
 					</div>
@@ -306,7 +351,7 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
 
 	return (
 		<motion.div
-			className="space-y-6 pt-16"
+			className="space-y-6 pb-24"
 			initial={{ opacity: 0 }}
 			animate={{ opacity: 1 }}
 			exit={{ opacity: 0 }}
@@ -316,39 +361,17 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
 				<AsciiLogo />
 			</FadeIn>
 
-			<FadeIn delay={0.05} className="text-center" variant="intro">
-				<p className="text-sm text-muted-foreground text-center -mt-16 mb-10 max-w-md mx-auto">
-					What did I do today? Yesterday? How long do I actually work? Am I
-					addicted to bullet chess? Screencap to understand your time.
-				</p>
+			<FadeIn delay={0.05} variant="intro">
+				<div className="text-center space-y-3 -mt-16">
+					<p className="text-sm text-muted-foreground max-w-md mx-auto">
+						What did I do today? Yesterday? Now long do I actualy work? Am I
+						addicted to bullet chess? Screencap to undrestand your time
+					</p>
+				</div>
 			</FadeIn>
-			{/* 
-			<FadeIn delay={0.12} className="grid grid-cols-3 gap-3 text-center" variant="intro">
-				<div className="p-3 rounded-lg bg-muted/30">
-					<Monitor className="h-4 w-4 mx-auto mb-1.5 text-primary" />
-					<p className="text-xs font-medium">Local Storage</p>
-					<p className="text-[10px] text-muted-foreground mt-0.5">
-						Your data stays on device
-					</p>
-				</div>
-				<div className="p-3 rounded-lg bg-muted/30">
-					<Lock className="h-4 w-4 mx-auto mb-1.5 text-primary" />
-					<p className="text-xs font-medium">Privacy First</p>
-					<p className="text-[10px] text-muted-foreground mt-0.5">
-						AI is opt-in only
-					</p>
-				</div>
-				<div className="p-3 rounded-lg bg-muted/30">
-					<Sparkles className="h-4 w-4 mx-auto mb-1.5 text-primary" />
-					<p className="text-xs font-medium">Smart Insights</p>
-					<p className="text-[10px] text-muted-foreground mt-0.5">
-						Auto-categorize activities
-					</p>
-				</div>
-			</FadeIn> */}
 
 			<FadeIn delay={0.22} variant="intro">
-				<div className="flex justify-center">
+				<div className="flex justify-center mt-12">
 					<MatrixBorder active={ctaActive} className="w-[280px]">
 						<button
 							type="button"
@@ -374,12 +397,14 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
 function ScreenRecordingStep({
 	status,
 	isPackaged,
+	isCapturingSample,
 	onNext,
 	onRefresh,
 	onBack,
 }: {
 	status: "granted" | "denied" | "not-determined";
 	isPackaged: boolean;
+	isCapturingSample: boolean;
 	onNext: () => void;
 	onRefresh: () => void;
 	onBack: () => void;
@@ -400,17 +425,19 @@ function ScreenRecordingStep({
 	const appName = isPackaged ? "Screencap" : "Electron";
 
 	return (
-		<div className="space-y-8 pb-24">
+		<div className="space-y-6 pb-24">
 			<FadeIn delay={0}>
-				<div className="space-y-4">
-					<PermissionHeader
-						icon={<Monitor className="h-6 w-6" />}
-						title="Screen Recording"
-						required
-					/>
-					<p className="text-muted-foreground">
-						Screencap needs permission to capture screenshots of your screen.
-						This is the core feature that enables activity tracking.
+				<div className="text-center space-y-3">
+					<div className="flex items-center justify-center gap-2">
+						<h1 className="text-2xl font-bold">Screen Recording</h1>
+						<span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-500 uppercase tracking-wide font-medium">
+							required
+						</span>
+					</div>
+					<p className="text-sm text-muted-foreground max-w-sm mx-auto">
+						Time analytics is boring without pictures. Screencap captures
+						screenshots to give you a visual timeline of your day with optional
+						ML classification
 					</p>
 				</div>
 			</FadeIn>
@@ -419,68 +446,48 @@ function ScreenRecordingStep({
 				<PermissionStatusBadge status={status} />
 			</FadeIn>
 
-			<FadeIn delay={0.04} className="space-y-4">
-				<h3 className="font-medium">What we access</h3>
-				<ul className="text-sm text-muted-foreground space-y-2">
-					<li className="flex items-start gap-2">
-						<Check className="h-4 w-4 text-green-500 mt-0.5 shrink-0" />
-						Screenshots of your displays at the interval you choose
-					</li>
-					<li className="flex items-start gap-2">
-						<Check className="h-4 w-4 text-green-500 mt-0.5 shrink-0" />
-						Stored locally in WebP format with automatic retention cleanup
-					</li>
-				</ul>
-
-				<h3 className="font-medium">What we do NOT do</h3>
-				<ul className="text-sm text-muted-foreground space-y-2">
-					<li className="flex items-start gap-2">
-						<X className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-						Share screenshots without your explicit choice (AI is opt-in)
-					</li>
-					<li className="flex items-start gap-2">
-						<X className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-						Capture when system is idle for 5+ minutes
-					</li>
-				</ul>
+			<FadeIn delay={0.04}>
+				<div className="space-y-2 text-center max-w-sm mx-auto">
+					<p className="text-xs text-muted-foreground">
+						Everything stays on your Mac. Screenshots are stored locally and
+						automatically cleaned up based on your retention settings.
+					</p>
+					<p className="text-xs text-muted-foreground">
+						Capture pauses when you're idle and respects your app exclusions.
+						Nothing is shared unless you explicitly enable AI.
+					</p>
+				</div>
 			</FadeIn>
 
 			{!isGranted && (
 				<FadeIn delay={0.06}>
-					<div className="flex gap-3 mb-6">
-						<PrimaryButton onClick={handleOpenSettings} className="flex-1">
+					<div className="flex justify-center gap-3 mb-4">
+						<PrimaryButton onClick={handleOpenSettings}>
 							<ExternalLink className="h-4 w-4" />
 							Open System Settings
 						</PrimaryButton>
 						<Button
 							variant="outline"
+							size="sm"
 							onClick={handleCheckAgain}
 							disabled={isChecking}
 						>
 							{isChecking ? (
-								<Loader2 className="h-4 w-4 animate-spin" />
+								<Loader2 className="h-3.5 w-3.5 animate-spin" />
 							) : (
-								<RefreshCw className="h-4 w-4" />
+								<RefreshCw className="h-3.5 w-3.5" />
 							)}
-							Check Again
 						</Button>
 					</div>
 
-					<TroubleshootingCard>
-						<ul className="text-sm space-y-2">
-							<li>
-								Look for <strong>{appName}</strong> in Privacy & Security →
-								Screen Recording
-							</li>
-							<li>
-								If already listed: toggle it <strong>OFF then ON</strong>
-							</li>
-							<li>
-								After granting, you may need to <strong>quit and reopen</strong>{" "}
-								the app
-							</li>
-						</ul>
-					</TroubleshootingCard>
+					<div className="bg-muted/30 rounded-lg p-3 max-w-sm mx-auto">
+						<p className="text-[11px] text-muted-foreground text-center">
+							Find{" "}
+							<span className="text-foreground font-medium">{appName}</span> in
+							Privacy & Security → Screen Recording. Toggle off then on if
+							already listed.
+						</p>
+					</div>
 				</FadeIn>
 			)}
 
@@ -490,9 +497,16 @@ function ScreenRecordingStep({
 					<PrimaryButton
 						onClick={onNext}
 						className="h-9 px-4"
-						disabled={!isGranted}
+						disabled={!isGranted || isCapturingSample}
 					>
-						Continue
+						{isCapturingSample ? (
+							<>
+								<Loader2 className="h-4 w-4 animate-spin" />
+								Capturing
+							</>
+						) : (
+							"Continue"
+						)}
 						<ArrowRight className="h-4 w-4" />
 					</PrimaryButton>
 				}
@@ -532,17 +546,15 @@ function AccessibilityStep({
 	const isGranted = status === "granted";
 
 	return (
-		<div className="space-y-8 pb-24">
+		<div className="space-y-6 pb-24">
 			<FadeIn delay={0}>
-				<div className="space-y-4">
-					<PermissionHeader
-						icon={<Eye className="h-6 w-6" />}
-						title="Accessibility"
-						recommended
-					/>
-					<p className="text-muted-foreground">
-						Accessibility access allows Screencap to detect which app and window
-						is in the foreground, providing better context for your activity.
+				<div className="text-center space-y-3">
+					<div className="flex items-center justify-center gap-2">
+						<h1 className="text-2xl font-bold">Accessibility</h1>
+					</div>
+					<p className="text-sm text-muted-foreground max-w-sm mx-auto">
+						Detects the active app and window title to give rich context to your
+						timeline.
 					</p>
 				</div>
 			</FadeIn>
@@ -551,52 +563,38 @@ function AccessibilityStep({
 				<PermissionStatusBadge status={status} />
 			</FadeIn>
 
-			<FadeIn delay={0.04} className="space-y-4">
-				<h3 className="font-medium">What we access</h3>
-				<ul className="text-sm text-muted-foreground space-y-2">
-					<li className="flex items-start gap-2">
-						<Check className="h-4 w-4 text-green-500 mt-0.5 shrink-0" />
-						Foreground app name and bundle ID
-					</li>
-					<li className="flex items-start gap-2">
-						<Check className="h-4 w-4 text-green-500 mt-0.5 shrink-0" />
-						Active window title
-					</li>
-				</ul>
-			</FadeIn>
-
-			<FadeIn delay={0.05}>
-				<div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4">
-					<p className="text-sm text-amber-600 dark:text-amber-400">
-						<strong>If you skip:</strong> Screenshots will still be captured,
-						but without app/window context. Classification will rely solely on
-						image analysis.
+			<FadeIn delay={0.04}>
+				<div className="space-y-2 text-center max-w-sm mx-auto">
+					<p className="text-xs text-muted-foreground">
+						Reads only the foreground app name and window title. This enables
+						precise filtering rules and better AI categorization.
 					</p>
+					{!isGranted && (
+						<p className="text-xs text-amber-600/80 dark:text-amber-400/80 mt-2">
+							Without this, screenshots are captured blindly without knowing
+							which app is active.
+						</p>
+					)}
 				</div>
 			</FadeIn>
 
-			<FadeIn delay={0.06}>
-				{!isGranted && (
-					<div className="flex gap-3 mb-6">
-						<PrimaryButton
-							onClick={handleRequest}
-							className="flex-1"
-							disabled={isRequesting}
-						>
+			{!isGranted && (
+				<FadeIn delay={0.06}>
+					<div className="flex justify-center gap-3 mb-4">
+						<PrimaryButton onClick={handleRequest} disabled={isRequesting}>
 							{isRequesting ? (
-								<Loader2 className="h-4 w-4 animate-spin" />
+								<Loader2 className="h-3.5 w-3.5 animate-spin" />
 							) : (
-								<Shield className="h-4 w-4" />
+								"Request Permission"
 							)}
-							Request Permission
 						</PrimaryButton>
-						<Button variant="outline" onClick={handleOpenSettings}>
-							<ExternalLink className="h-4 w-4" />
+						<Button variant="outline" size="sm" onClick={handleOpenSettings}>
+							<ExternalLink className="h-3.5 w-3.5" />
 							Settings
 						</Button>
 					</div>
-				)}
-			</FadeIn>
+				</FadeIn>
+			)}
 
 			<BottomActions
 				left={<BackButton onClick={onBack} />}
@@ -605,7 +603,7 @@ function AccessibilityStep({
 						onClick={isGranted ? onNext : onSkip}
 						className="h-9 px-4"
 					>
-						Continue
+						{isGranted ? "Continue" : "Skip for now"}
 						<ArrowRight className="h-4 w-4" />
 					</PrimaryButton>
 				}
@@ -645,68 +643,62 @@ function AutomationStep({
 	};
 
 	return (
-		<div className="space-y-8 pb-24">
+		<div className="space-y-6 pb-24">
 			<FadeIn delay={0}>
-				<div className="space-y-4">
-					<PermissionHeader
-						icon={<Zap className="h-6 w-6" />}
-						title="Automation"
-						optional
-					/>
-					<p className="text-muted-foreground">
-						Automation permissions enable Screencap to read URLs from browsers
-						and content info from apps like Spotify. macOS prompts for each app
-						separately.
+				<div className="text-center space-y-3">
+					<div className="flex items-center justify-center gap-2">
+						<h1 className="text-2xl font-bold">Automation</h1>
+					</div>
+					<p className="text-sm text-muted-foreground max-w-sm mx-auto">
+						Enables reading browser URLs and media info from apps like Spotify
+						for deeper insights.
 					</p>
 				</div>
 			</FadeIn>
 
-			<FadeIn delay={0.02} className="space-y-3">
+			<FadeIn delay={0.02} className="space-y-2 max-w-sm mx-auto">
 				<AutomationItem
 					label="System Events"
-					description="Foreground app/window detection"
+					description="Window detection"
 					status={automationStatus.systemEvents}
 				/>
 				<AutomationItem
 					label="Browsers"
-					description="Safari, Chrome, Brave, Edge URL extraction"
+					description="URL from Safari, Chrome, etc."
 					status={automationStatus.browsers}
 				/>
 				<AutomationItem
 					label="Apps"
-					description="Spotify track info and similar"
+					description="Spotify, Music, etc."
 					status={automationStatus.apps}
 				/>
 			</FadeIn>
 
 			<FadeIn delay={0.04}>
-				<div className="bg-muted/50 rounded-lg p-4 space-y-2">
-					<p className="text-sm">
-						<strong>How permissions work:</strong> macOS will prompt you the
-						first time Screencap tries to access each app. Click "Test Context
-						Detection" to trigger these prompts while using your browser or
-						Spotify.
+				<div className="text-center max-w-sm mx-auto">
+					<p className="text-xs text-muted-foreground">
+						macOS will prompt you individually for each app the first time we
+						try to access it. Click "Test" to trigger these prompts now.
 					</p>
 				</div>
 			</FadeIn>
 
 			<FadeIn delay={0.06}>
-				<div className="flex gap-3 mb-6">
+				<div className="flex justify-center gap-3 mb-4">
 					<Button
 						onClick={handleTest}
 						variant="secondary"
-						className="flex-1"
+						size="sm"
 						disabled={isTesting}
 					>
 						{isTesting ? (
-							<Loader2 className="h-4 w-4 animate-spin" />
+							<Loader2 className="h-3.5 w-3.5 animate-spin" />
 						) : (
-							<Eye className="h-4 w-4" />
+							"Test Detection"
 						)}
-						Test Context Detection
 					</Button>
-					<Button variant="outline" onClick={handleOpenSettings}>
-						<ExternalLink className="h-4 w-4" />
+					<Button variant="outline" size="sm" onClick={handleOpenSettings}>
+						<ExternalLink className="h-3.5 w-3.5" />
 						Settings
 					</Button>
 				</div>
@@ -725,387 +717,421 @@ function AutomationStep({
 	);
 }
 
+type AiModeChoice = "local" | "cloud" | "disabled";
+
 function AIChoiceStep({
-	apiKey,
-	llmEnabled,
-	onApiKeyChange,
-	onLlmEnabledChange,
-	onNext,
+	settings,
+	saveSettings,
 	onBack,
+	onNext,
 }: {
-	apiKey: string | null;
-	llmEnabled: boolean;
-	onApiKeyChange: (key: string | null) => void;
-	onLlmEnabledChange: (enabled: boolean) => void;
-	onNext: () => void;
+	settings: Settings;
+	saveSettings: (settings: Settings) => Promise<void>;
 	onBack: () => void;
+	onNext: (settings: Settings) => Promise<void>;
 }) {
-	const [localKey, setLocalKey] = useState(apiKey || "");
-	const [testResult, setTestResult] = useState<LLMTestResult | null>(null);
-	const [isTesting, setIsTesting] = useState(false);
-
-	const handleEnableAI = () => {
-		onLlmEnabledChange(true);
+	const deriveMode = (): AiModeChoice => {
+		if (!settings.llmEnabled) return "disabled";
+		if (settings.localLlmEnabled) return "local";
+		return "cloud";
 	};
 
-	const handleDisableAI = () => {
-		onLlmEnabledChange(false);
-		onApiKeyChange(null);
-	};
+	const [mode, setMode] = useState<AiModeChoice>(deriveMode);
+	const [allowVisionUploads, setAllowVisionUploads] = useState(
+		settings.allowVisionUploads,
+	);
+	const [apiKey, setApiKey] = useState(settings.apiKey ?? "");
+	const [localBaseUrl, setLocalBaseUrl] = useState(settings.localLlmBaseUrl);
+	const [localModel, setLocalModel] = useState(settings.localLlmModel);
 
-	const handleSaveAndTest = async () => {
-		if (!localKey.trim()) return;
-		onApiKeyChange(localKey);
-		setIsTesting(true);
-		setTestResult(null);
-		try {
-			const result = await window.api?.llm.testConnection();
-			setTestResult(result ?? { success: false, error: "No response" });
-		} catch (error) {
-			setTestResult({ success: false, error: String(error) });
-		} finally {
-			setIsTesting(false);
+	const [cloudTestResult, setCloudTestResult] = useState<LLMTestResult | null>(
+		null,
+	);
+	const [localTestResult, setLocalTestResult] = useState<LLMTestResult | null>(
+		null,
+	);
+	const [isTestingCloud, setIsTestingCloud] = useState(false);
+	const [isTestingLocal, setIsTestingLocal] = useState(false);
+	const [isContinuing, setIsContinuing] = useState(false);
+
+	useEffect(() => {
+		const nextMode: AiModeChoice = !settings.llmEnabled
+			? "disabled"
+			: settings.localLlmEnabled
+				? "local"
+				: "cloud";
+		setMode(nextMode);
+		setAllowVisionUploads(settings.allowVisionUploads);
+		setApiKey(settings.apiKey ?? "");
+		setLocalBaseUrl(settings.localLlmBaseUrl);
+		setLocalModel(settings.localLlmModel);
+	}, [
+		settings.allowVisionUploads,
+		settings.apiKey,
+		settings.llmEnabled,
+		settings.localLlmBaseUrl,
+		settings.localLlmEnabled,
+		settings.localLlmModel,
+	]);
+
+	const localConfigured = Boolean(localBaseUrl.trim() && localModel.trim());
+	const cloudConfigured = Boolean(apiKey.trim());
+
+	const draftSettings = useCallback((): Settings => {
+		if (mode === "disabled") {
+			return {
+				...settings,
+				llmEnabled: false,
+				localLlmEnabled: false,
+				allowVisionUploads: false,
+				apiKey: null,
+			};
 		}
-	};
+
+		if (mode === "local") {
+			return {
+				...settings,
+				llmEnabled: true,
+				localLlmEnabled: true,
+				localLlmBaseUrl: localBaseUrl,
+				localLlmModel: localModel,
+				allowVisionUploads: false,
+				apiKey: null,
+			};
+		}
+
+		return {
+			...settings,
+			llmEnabled: true,
+			localLlmEnabled: false,
+			apiKey: apiKey.trim() || null,
+			allowVisionUploads: apiKey.trim() ? allowVisionUploads : false,
+		};
+	}, [mode, apiKey, allowVisionUploads, localBaseUrl, localModel, settings]);
+
+	const persistDraft = useCallback(async () => {
+		const next = draftSettings();
+		await saveSettings(next);
+		return next;
+	}, [draftSettings, saveSettings]);
 
 	return (
-		<div className="space-y-8">
+		<div className="space-y-6 pb-24">
 			<FadeIn delay={0}>
-				<div className="space-y-4">
-					<PermissionHeader
-						icon={<Sparkles className="h-6 w-6" />}
-						title="AI Classification"
-					/>
-					<p className="text-muted-foreground">
-						Optionally enable AI to automatically categorize your activities.
-						Screenshots are sent to OpenRouter for analysis.
+				<div className="text-center space-y-3">
+					<div className="flex items-center justify-center gap-2">
+						<h1 className="text-2xl font-bold">Classification</h1>
+					</div>
+					<p className="text-sm text-muted-foreground max-w-md mx-auto">
+						Choose how capture events are classified. Cloud is recommended
+						option for best accuracy, while local suits privacy-first users
 					</p>
 				</div>
 			</FadeIn>
 
-			<FadeIn delay={0.02} className="grid gap-4">
-				<button
-					type="button"
-					onClick={handleEnableAI}
-					className={cn(
-						"p-4 rounded-lg border text-left transition-all",
-						llmEnabled
-							? "border-primary bg-primary/5"
-							: "border-border hover:border-muted-foreground/50",
-					)}
-				>
-					<div className="flex items-start gap-3">
-						<div
+			<FadeIn delay={0.02}>
+				<div className="grid grid-cols-2 gap-6 max-w-2xl mx-auto">
+					<div className="space-y-3">
+						<button
+							type="button"
+							onClick={() => setMode("cloud")}
 							className={cn(
-								"p-2 rounded-lg",
-								llmEnabled ? "bg-primary/20" : "bg-muted",
+								"w-full p-4 rounded-lg border text-left transition-colors",
+								mode === "cloud"
+									? "border-yellow-500/40 bg-yellow-500/5"
+									: "border-zinc-800/50 bg-black/30 hover:border-zinc-700",
 							)}
 						>
-							<Sparkles
-								className={cn(
-									"h-5 w-5",
-									llmEnabled ? "text-primary" : "text-muted-foreground",
+							<div className="flex items-center gap-3">
+								<div className="flex-1">
+									<div className="flex items-center gap-2">
+										<p className="font-medium">Cloud LLM</p>
+										<span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-500 uppercase tracking-wide font-medium">
+											default
+										</span>
+									</div>
+									<p className="text-xs text-muted-foreground mt-0.5">
+										Best accuracy
+									</p>
+								</div>
+								{mode === "cloud" && (
+									<Check className="h-5 w-5 text-primary shrink-0" />
 								)}
-							/>
-						</div>
-						<div className="flex-1">
-							<p className="font-medium">Enable AI classification</p>
-							<p className="text-sm text-muted-foreground mt-1">
-								Screenshots are analyzed by AI to categorize activities
-								automatically. Requires an OpenRouter API key.
-							</p>
-						</div>
-						{llmEnabled && <Check className="h-5 w-5 text-primary shrink-0" />}
-					</div>
-				</button>
+							</div>
+						</button>
 
-				<button
-					type="button"
-					onClick={handleDisableAI}
-					className={cn(
-						"p-4 rounded-lg border text-left transition-all",
-						!llmEnabled
-							? "border-primary bg-primary/5"
-							: "border-border hover:border-muted-foreground/50",
-					)}
-				>
-					<div className="flex items-start gap-3">
-						<div
+						<button
+							type="button"
+							onClick={() => setMode("local")}
 							className={cn(
-								"p-2 rounded-lg",
-								!llmEnabled ? "bg-primary/20" : "bg-muted",
+								"w-full p-4 rounded-lg border text-left transition-colors",
+								mode === "local"
+									? "border-yellow-500/40 bg-yellow-500/5"
+									: "border-zinc-800/50 bg-black/30 hover:border-zinc-700",
 							)}
 						>
-							<Lock
-								className={cn(
-									"h-5 w-5",
-									!llmEnabled ? "text-primary" : "text-muted-foreground",
+							<div className="flex items-center gap-3">
+								<div className="flex-1">
+									<p className="font-medium">Local LLM</p>
+									<p className="text-xs text-muted-foreground mt-0.5">
+										Fully offline with Ollama or LM Studio
+									</p>
+								</div>
+								{mode === "local" && (
+									<Check className="h-5 w-5 text-primary shrink-0" />
 								)}
-							/>
-						</div>
-						<div className="flex-1">
-							<p className="font-medium">Keep everything local</p>
-							<p className="text-sm text-muted-foreground mt-1">
-								No data leaves your device. Events are captured but not
-								automatically categorized.
-							</p>
-						</div>
-						{!llmEnabled && <Check className="h-5 w-5 text-primary shrink-0" />}
-					</div>
-				</button>
-			</FadeIn>
+							</div>
+						</button>
 
-			{llmEnabled && (
-				<FadeIn delay={0.04}>
-					<div className="space-y-4 p-4 rounded-lg bg-muted/50">
-						<div className="space-y-2">
-							<label className="text-sm font-medium">OpenRouter API Key</label>
-							<div className="flex gap-2">
-								<Input
-									type="password"
-									value={localKey}
-									onChange={(e) => setLocalKey(e.target.value)}
-									placeholder="sk-or-..."
-									className="flex-1"
-								/>
+						<button
+							type="button"
+							onClick={() => setMode("disabled")}
+							className={cn(
+								"w-full p-4 rounded-lg border text-left transition-colors",
+								mode === "disabled"
+									? "border-yellow-500/40 bg-yellow-500/5"
+									: "border-zinc-800/50 bg-black/30 hover:border-zinc-700",
+							)}
+						>
+							<div className="flex items-center gap-3">
+								<div className="flex-1">
+									<p className="font-medium">Disable all</p>
+									<p className="text-xs text-muted-foreground mt-0.5">
+										No AI classification
+									</p>
+								</div>
+								{mode === "disabled" && (
+									<Check className="h-5 w-5 text-primary shrink-0" />
+								)}
+							</div>
+						</button>
+					</div>
+
+					<div className="min-h-[200px]">
+						{mode === "cloud" && (
+							<div className="space-y-3 p-4 rounded-lg bg-muted/50 h-full">
+								<div className="flex items-center justify-between gap-3">
+									<p className="text-sm font-medium">OpenRouter</p>
+									<a
+										href="https://openrouter.ai/keys"
+										onClick={(e) => {
+											e.preventDefault();
+											window.api?.app.openExternal(
+												"https://openrouter.ai/keys",
+											);
+										}}
+										className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+									>
+										<ExternalLink className="h-3.5 w-3.5" />
+										Get key
+									</a>
+								</div>
+
+								<div className="space-y-2">
+									<label className="text-xs text-muted-foreground">
+										API key (OpenRouter or OpenAI compatible)
+									</label>
+									<Input
+										type="password"
+										value={apiKey}
+										onChange={(e) => setApiKey(e.target.value)}
+										placeholder="sk-..."
+									/>
+								</div>
+
 								<Button
-									onClick={handleSaveAndTest}
-									disabled={!localKey.trim() || isTesting}
+									onClick={async () => {
+										setIsTestingCloud(true);
+										setCloudTestResult(null);
+										try {
+											await persistDraft();
+											const result = await window.api?.llm.testConnection();
+											setCloudTestResult(
+												result ?? { success: false, error: "No response" },
+											);
+										} catch (error) {
+											setCloudTestResult({
+												success: false,
+												error: String(error),
+											});
+										} finally {
+											setIsTestingCloud(false);
+										}
+									}}
+									disabled={!cloudConfigured || isTestingCloud}
+									className="w-full"
 								>
-									{isTesting ? (
+									{isTestingCloud ? (
 										<Loader2 className="h-4 w-4 animate-spin" />
 									) : (
-										"Test"
+										"Test & Save"
 									)}
 								</Button>
+
+								{cloudTestResult && (
+									<div
+										className={cn(
+											"flex items-center gap-2 p-2 rounded-lg text-sm",
+											cloudTestResult.success
+												? "bg-green-500/10 text-green-600 dark:text-green-400"
+												: "bg-destructive/10 text-destructive",
+										)}
+									>
+										{cloudTestResult.success ? (
+											<>
+												<Check className="h-4 w-4" />
+												Connected
+											</>
+										) : (
+											<>
+												<AlertCircle className="h-4 w-4" />
+												{cloudTestResult.error || "Failed"}
+											</>
+										)}
+									</div>
+								)}
 							</div>
-							<p className="text-xs text-muted-foreground">
-								Get your API key from{" "}
-								<a
-									href="https://openrouter.ai/keys"
-									onClick={(e) => {
-										e.preventDefault();
-										window.api?.app.openExternal("https://openrouter.ai/keys");
+						)}
+
+						{mode === "local" && (
+							<div className="space-y-3 p-4 rounded-lg bg-muted/50 h-full">
+								<p className="text-sm font-medium">Ollama / LM Studio</p>
+
+								<div className="space-y-1">
+									<label className="text-xs text-muted-foreground">
+										Base URL
+									</label>
+									<Input
+										value={localBaseUrl}
+										onChange={(e) => setLocalBaseUrl(e.target.value)}
+										placeholder="http://localhost:11434/v1"
+									/>
+								</div>
+								<div className="space-y-1">
+									<label className="text-xs text-muted-foreground">Model</label>
+									<Input
+										value={localModel}
+										onChange={(e) => setLocalModel(e.target.value)}
+										placeholder="llama3.2"
+									/>
+								</div>
+								<Button
+									onClick={async () => {
+										setIsTestingLocal(true);
+										setLocalTestResult(null);
+										try {
+											await persistDraft();
+											const result =
+												await window.api?.llm.testLocalConnection();
+											setLocalTestResult(
+												result ?? { success: false, error: "No response" },
+											);
+										} catch (error) {
+											setLocalTestResult({
+												success: false,
+												error: String(error),
+											});
+										} finally {
+											setIsTestingLocal(false);
+										}
 									}}
-									className="text-primary hover:underline"
+									disabled={!localConfigured || isTestingLocal}
+									className="w-full"
 								>
-									openrouter.ai/keys
-								</a>
-							</p>
-						</div>
+									{isTestingLocal ? (
+										<Loader2 className="h-4 w-4 animate-spin" />
+									) : (
+										"Test & Save"
+									)}
+								</Button>
 
-						{testResult && (
-							<div
-								className={cn(
-									"flex items-center gap-2 p-3 rounded-lg text-sm",
-									testResult.success
-										? "bg-green-500/10 text-green-600 dark:text-green-400"
-										: "bg-destructive/10 text-destructive",
+								{!localConfigured && (
+									<div className="text-xs text-amber-600/80 dark:text-amber-400/80">
+										Set Base URL and Model to enable.
+									</div>
 								)}
-							>
-								{testResult.success ? (
-									<>
-										<Check className="h-4 w-4" />
-										Connection successful!
-									</>
-								) : (
-									<>
-										<AlertCircle className="h-4 w-4" />
-										{testResult.error || "Connection failed"}
-									</>
+
+								{localTestResult && (
+									<div
+										className={cn(
+											"flex items-center gap-2 p-2 rounded-lg text-sm",
+											localTestResult.success
+												? "bg-green-500/10 text-green-600 dark:text-green-400"
+												: "bg-destructive/10 text-destructive",
+										)}
+									>
+										{localTestResult.success ? (
+											<>
+												<Check className="h-4 w-4" />
+												Connected
+											</>
+										) : (
+											<>
+												<AlertCircle className="h-4 w-4" />
+												{localTestResult.error || "Failed"}
+											</>
+										)}
+									</div>
 								)}
 							</div>
 						)}
 
-						<div className="text-sm text-muted-foreground space-y-1">
-							<p>
-								<strong>What is sent:</strong>
-							</p>
-							<ul className="list-disc list-inside space-y-0.5">
-								<li>Screenshot image (WebP, ~100KB)</li>
-								<li>App name and window title (if available)</li>
-							</ul>
-						</div>
-					</div>
-				</FadeIn>
-			)}
-
-			<BottomActions
-				left={<BackButton onClick={onBack} />}
-				right={
-					<PrimaryButton onClick={onNext} className="h-9 px-4">
-						Continue
-						<ArrowRight className="h-4 w-4" />
-					</PrimaryButton>
-				}
-			/>
-		</div>
-	);
-}
-
-function PrivacyStep({
-	onNext,
-	onBack,
-}: {
-	onNext: () => void;
-	onBack: () => void;
-}) {
-	return (
-		<div className="space-y-8 pb-24">
-			<FadeIn delay={0}>
-				<div className="space-y-4">
-					<PermissionHeader
-						icon={<Shield className="h-6 w-6" />}
-						title="Privacy Controls"
-					/>
-					<p className="text-muted-foreground">
-						Screencap gives you fine-grained control over what gets captured and
-						analyzed. You can configure these anytime in Settings.
-					</p>
-				</div>
-			</FadeIn>
-
-			<FadeIn delay={0.02} className="space-y-4">
-				<InfoCard
-					icon={<Eye className="h-5 w-5" />}
-					title="Skip capture for apps/sites"
-					description="Prevent screenshots entirely when specific apps or websites are in focus. No image is captured."
-				/>
-				<InfoCard
-					icon={<Sparkles className="h-5 w-5" />}
-					title="Skip AI for apps/sites"
-					description="Capture screenshots locally but don't send to AI. Useful for sensitive work apps."
-				/>
-				<InfoCard
-					icon={<Lock className="h-5 w-5" />}
-					title="Automatic idle detection"
-					description="Capture is automatically skipped when your system is idle for 5+ minutes."
-				/>
-			</FadeIn>
-
-			<FadeIn delay={0.04}>
-				<div className="bg-muted/50 rounded-lg p-4">
-					<p className="text-sm text-muted-foreground">
-						<strong>Tip:</strong> Use the Automation Rules in Settings to create
-						rules for specific apps (by bundle ID) or websites (by domain).
-					</p>
-				</div>
-			</FadeIn>
-
-			<BottomActions
-				left={<BackButton onClick={onBack} />}
-				right={
-					<PrimaryButton onClick={onNext} className="h-9 px-4">
-						Continue
-						<ArrowRight className="h-4 w-4" />
-					</PrimaryButton>
-				}
-			/>
-		</div>
-	);
-}
-
-function FinishStep({
-	status,
-	llmEnabled,
-	onComplete,
-	onBack,
-}: {
-	status: ReturnType<typeof useOnboardingStatus>;
-	llmEnabled: boolean;
-	onComplete: () => void;
-	onBack: () => void;
-}) {
-	const [isStarting, setIsStarting] = useState(false);
-
-	const handleComplete = async () => {
-		setIsStarting(true);
-		if (status.canCapture) {
-			await window.api?.scheduler.start();
-		}
-		onComplete();
-	};
-
-	return (
-		<div className="space-y-8 pb-24">
-			<FadeIn delay={0}>
-				<div className="text-center space-y-4">
-					<div className="inline-flex p-4 rounded-2xl bg-green-500/10">
-						<Check className="h-12 w-12 text-green-500" />
-					</div>
-					<h1 className="text-3xl font-bold">You're all set!</h1>
-					<p className="text-lg text-muted-foreground">
-						Screencap is ready to start tracking your activity.
-					</p>
-				</div>
-			</FadeIn>
-
-			<FadeIn delay={0.02} className="space-y-3">
-				<h3 className="font-medium">Setup summary</h3>
-				<SummaryItem
-					label="Screen Recording"
-					status={status.screenCaptureStatus}
-					required
-				/>
-				<SummaryItem
-					label="Accessibility"
-					status={status.accessibilityStatus}
-				/>
-				<SummaryItem
-					label="System Events"
-					status={status.automationStatus.systemEvents}
-				/>
-				<SummaryItem
-					label="Browser URLs"
-					status={status.automationStatus.browsers}
-				/>
-				<div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-					<span className="text-sm">AI Classification</span>
-					<span
-						className={cn(
-							"text-xs px-2 py-1 rounded-full",
-							llmEnabled
-								? "bg-green-500/20 text-green-600 dark:text-green-400"
-								: "bg-muted text-muted-foreground",
-						)}
-					>
-						{llmEnabled ? "Enabled" : "Disabled"}
-					</span>
-				</div>
-			</FadeIn>
-
-			{!status.canCapture && (
-				<FadeIn delay={0.04}>
-					<div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
-						<div className="flex items-start gap-2">
-							<AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
-							<div>
-								<p className="font-medium text-destructive">
-									Screen Recording required
-								</p>
-								<p className="text-sm text-destructive/80 mt-1">
-									Go back and grant Screen Recording permission to start
-									capturing.
+						{mode === "disabled" && (
+							<div className="flex items-center justify-center h-full p-4 rounded-lg border border-dashed border-zinc-800/50">
+								<p className="text-sm text-muted-foreground text-center">
+									Screenshots will be captured but not classified by AI
 								</p>
 							</div>
-						</div>
+						)}
 					</div>
-				</FadeIn>
-			)}
+				</div>
+			</FadeIn>
+
+			<FadeIn delay={0.08}>
+				<div className="space-y-3 max-w-2xl mx-auto mt-16">
+					<div className="text-center space-y-1">
+						<p className="text-sm font-medium">Privacy controls</p>
+						<p className="text-xs text-muted-foreground">
+							You can fine-tune capture anytime in Settings
+						</p>
+					</div>
+					<div className="grid grid-cols-3 gap-3">
+						<PrivacyItem
+							title="Skip capture"
+							description="Block screenshots for specific apps or domains"
+						/>
+						<PrivacyItem
+							title="Skip AI"
+							description="Capture locally but never send to AI"
+						/>
+						<PrivacyItem
+							title="Idle detection"
+							description="Auto-pause after 5+ minutes of inactivity"
+						/>
+					</div>
+				</div>
+			</FadeIn>
 
 			<BottomActions
 				left={<BackButton onClick={onBack} />}
 				right={
 					<PrimaryButton
-						onClick={handleComplete}
+						onClick={async () => {
+							setIsContinuing(true);
+							try {
+								await onNext(draftSettings());
+							} finally {
+								setIsContinuing(false);
+							}
+						}}
 						className="h-9 px-4"
-						disabled={isStarting}
+						disabled={isContinuing}
 					>
-						{isStarting ? (
+						{isContinuing ? (
 							<Loader2 className="h-4 w-4 animate-spin" />
 						) : (
 							<>
-								{status.canCapture ? "Start Screencap" : "Finish Setup"}
+								Continue
 								<ArrowRight className="h-4 w-4" />
 							</>
 						)}
@@ -1116,62 +1142,189 @@ function FinishStep({
 	);
 }
 
-function InfoCard({
-	icon,
-	title,
-	description,
+function ReviewStep({
+	eventId,
+	isCapturingSample,
+	onRetake,
+	onBack,
+	onFinish,
 }: {
-	icon: React.ReactNode;
-	title: string;
-	description: string;
+	eventId: string | null;
+	isCapturingSample: boolean;
+	onRetake: () => Promise<void>;
+	onBack: () => void;
+	onFinish: () => Promise<void>;
 }) {
+	const [event, setEvent] = useState<Event | null>(null);
+	const [screenshots, setScreenshots] = useState<EventScreenshot[]>([]);
+	const [isLoading, setIsLoading] = useState(false);
+	const [isFinishing, setIsFinishing] = useState(false);
+
+	const refresh = useCallback(async () => {
+		if (!eventId) {
+			setEvent(null);
+			setScreenshots([]);
+			return;
+		}
+		setIsLoading(true);
+		try {
+			const [nextEvent, nextShots] = await Promise.all([
+				window.api.storage.getEvent(eventId),
+				window.api.storage.getEventScreenshots(eventId),
+			]);
+			setEvent(nextEvent);
+			setScreenshots(nextShots);
+		} finally {
+			setIsLoading(false);
+		}
+	}, [eventId]);
+
+	useEffect(() => {
+		void refresh();
+	}, [refresh]);
+
+	useEffect(() => {
+		if (!eventId) return;
+		const unsubscribe = window.api.on("event:updated", (id) => {
+			if (id !== eventId) return;
+			void refresh();
+		});
+		return unsubscribe;
+	}, [eventId, refresh]);
+
+	const primaryScreenshot =
+		screenshots.find((s) => s.isPrimary) ?? screenshots[0] ?? null;
+	const previewPath =
+		primaryScreenshot?.originalPath ??
+		event?.originalPath ??
+		event?.thumbnailPath ??
+		null;
+	const statusLabel = event?.status ?? (eventId ? "processing" : null);
+
 	return (
-		<div className="flex gap-4 p-4 rounded-lg bg-muted/50">
-			<div className="shrink-0 p-2 rounded-lg bg-primary/10 text-primary h-fit">
-				{icon}
-			</div>
-			<div>
-				<p className="font-medium">{title}</p>
-				<p className="text-sm text-muted-foreground mt-1">{description}</p>
-			</div>
+		<div className="space-y-6 pb-24">
+			<FadeIn delay={0}>
+				<div className="text-center space-y-3">
+					<h1 className="text-2xl font-bold">Review your first capture</h1>
+					<p className="text-sm text-muted-foreground max-w-md mx-auto">
+						This is what will appear in your Timeline.
+					</p>
+				</div>
+			</FadeIn>
+
+			<FadeIn delay={0.02}>
+				<div className="rounded-xl border border-zinc-800/50 bg-black/20 overflow-hidden">
+					<div className="aspect-video bg-muted/30 flex items-center justify-center">
+						{previewPath ? (
+							<img
+								src={`local-file://${previewPath}`}
+								alt=""
+								className="w-full h-full object-cover"
+								loading="lazy"
+							/>
+						) : (
+							<div className="text-sm text-muted-foreground">
+								{eventId ? "Waiting for screenshot…" : "No capture yet"}
+							</div>
+						)}
+					</div>
+					<div className="p-4 space-y-2">
+						<div className="flex items-center justify-between gap-2">
+							<div className="text-sm font-medium">
+								{event?.appName ?? "Unknown app"}
+							</div>
+							<div className="text-xs text-muted-foreground flex items-center gap-2">
+								{(isCapturingSample || isLoading) && (
+									<Loader2 className="h-3.5 w-3.5 animate-spin" />
+								)}
+								{statusLabel}
+							</div>
+						</div>
+						{event?.caption && (
+							<div className="text-sm text-muted-foreground">
+								{event.caption}
+							</div>
+						)}
+						<div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+							<div className="truncate">
+								<span className="text-foreground/80">Category:</span>{" "}
+								{event?.userLabel || event?.category || "—"}
+							</div>
+							<div className="truncate">
+								<span className="text-foreground/80">Website:</span>{" "}
+								{event?.urlHost || "—"}
+							</div>
+							<div className="truncate">
+								<span className="text-foreground/80">Window:</span>{" "}
+								{event?.windowTitle || "—"}
+							</div>
+							<div className="truncate">
+								<span className="text-foreground/80">Project:</span>{" "}
+								{event?.project || "—"}
+							</div>
+						</div>
+					</div>
+				</div>
+			</FadeIn>
+
+			<BottomActions
+				left={<BackButton onClick={onBack} />}
+				right={
+					<div className="flex items-center gap-2">
+						<Button
+							variant="outline"
+							size="sm"
+							onClick={async () => {
+								await onRetake();
+							}}
+							disabled={isCapturingSample || isLoading}
+						>
+							{isCapturingSample ? (
+								<Loader2 className="h-3.5 w-3.5 animate-spin" />
+							) : (
+								<RefreshCw className="h-3.5 w-3.5" />
+							)}
+							Retake
+						</Button>
+						<PrimaryButton
+							onClick={async () => {
+								setIsFinishing(true);
+								try {
+									await onFinish();
+								} finally {
+									setIsFinishing(false);
+								}
+							}}
+							className="h-9 px-4"
+							disabled={isFinishing}
+						>
+							{isFinishing ? (
+								<Loader2 className="h-4 w-4 animate-spin" />
+							) : (
+								<>
+									Start
+									<ArrowRight className="h-4 w-4" />
+								</>
+							)}
+						</PrimaryButton>
+					</div>
+				}
+			/>
 		</div>
 	);
 }
 
-function PermissionHeader({
-	icon,
+function PrivacyItem({
 	title,
-	required,
-	recommended,
-	optional,
+	description,
 }: {
-	icon: React.ReactNode;
 	title: string;
-	required?: boolean;
-	recommended?: boolean;
-	optional?: boolean;
+	description: string;
 }) {
 	return (
-		<div className="flex items-center gap-4">
-			<div className="p-3 rounded-xl bg-primary/10 text-primary">{icon}</div>
-			<div>
-				<h1 className="text-2xl font-bold">{title}</h1>
-				{required && (
-					<span className="text-xs px-2 py-0.5 rounded-full bg-red-500/20 text-red-600 dark:text-red-400">
-						Required
-					</span>
-				)}
-				{recommended && (
-					<span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400">
-						Recommended
-					</span>
-				)}
-				{optional && (
-					<span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-						Optional
-					</span>
-				)}
-			</div>
+		<div className="p-3 rounded-lg bg-muted/50">
+			<p className="text-sm font-medium">{title}</p>
+			<p className="text-xs text-muted-foreground mt-0.5">{description}</p>
 		</div>
 	);
 }
@@ -1181,47 +1334,39 @@ function PermissionStatusBadge({
 }: {
 	status: "granted" | "denied" | "not-determined";
 }) {
+	if (status === "granted") {
+		return <StampStatus />;
+	}
+
 	const config = {
-		granted: {
-			bg: "bg-green-500/10 border-green-500/20",
-			text: "text-green-600 dark:text-green-400",
-			icon: <Check className="h-5 w-5" />,
-			label: "Permission granted",
-		},
 		denied: {
-			bg: "bg-red-500/10 border-red-500/20",
+			bg: "bg-red-500/10",
 			text: "text-red-600 dark:text-red-400",
-			icon: <X className="h-5 w-5" />,
-			label: "Permission denied",
+			icon: <X className="h-3 w-3" />,
+			label: "Denied",
 		},
 		"not-determined": {
-			bg: "bg-amber-500/10 border-amber-500/20",
+			bg: "bg-amber-500/10",
 			text: "text-amber-600 dark:text-amber-400",
-			icon: <AlertCircle className="h-5 w-5" />,
-			label: "Permission not yet requested",
+			icon: <AlertCircle className="h-3 w-3" />,
+			label: "Not granted",
 		},
 	};
 
 	const { bg, text, icon, label } = config[status];
 
 	return (
-		<div
-			className={cn("flex items-center gap-3 p-4 rounded-lg border", bg, text)}
-		>
-			{icon}
-			<span className="font-medium">{label}</span>
-		</div>
-	);
-}
-
-function TroubleshootingCard({ children }: { children: React.ReactNode }) {
-	return (
-		<div className="bg-muted/50 rounded-lg p-4 space-y-2">
-			<p className="text-sm font-medium flex items-center gap-2">
-				<AlertCircle className="h-4 w-4" />
-				Troubleshooting
-			</p>
-			{children}
+		<div className="flex justify-center">
+			<div
+				className={cn(
+					"inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium",
+					bg,
+					text,
+				)}
+			>
+				{icon}
+				{label}
+			</div>
 		</div>
 	);
 }
@@ -1251,39 +1396,6 @@ function AutomationItem({
 			<div>
 				<p className="text-sm font-medium">{label}</p>
 				<p className="text-xs text-muted-foreground">{description}</p>
-			</div>
-			<span className={cn("text-xs px-2 py-1 rounded-full", colors[status])}>
-				{labels[status]}
-			</span>
-		</div>
-	);
-}
-
-function SummaryItem({
-	label,
-	status,
-	required,
-}: {
-	label: string;
-	status: "granted" | "denied" | "not-determined";
-	required?: boolean;
-}) {
-	const colors = {
-		granted: "bg-green-500/20 text-green-600 dark:text-green-400",
-		denied: "bg-red-500/20 text-red-600 dark:text-red-400",
-		"not-determined": "bg-muted text-muted-foreground",
-	};
-	const labels = {
-		granted: "Granted",
-		denied: "Denied",
-		"not-determined": "Skipped",
-	};
-
-	return (
-		<div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-			<div className="flex items-center gap-2">
-				<span className="text-sm">{label}</span>
-				{required && <span className="text-xs text-red-500">*</span>}
 			</div>
 			<span className={cn("text-xs px-2 py-1 rounded-full", colors[status])}>
 				{labels[status]}

@@ -67,6 +67,11 @@ describe("evaluateAutomationPolicy", () => {
 		expect(result.overrides.category).toBe("Leisure");
 	});
 
+	it("defaults porn-like websites to Leisure even without rules", () => {
+		const result = evaluateAutomationPolicy({ urlHost: "pornhub.com" }, null);
+		expect(result.overrides.category).toBe("Leisure");
+	});
+
 	it("host rule overrides app rule (precedence)", () => {
 		const rules: AutomationRules = {
 			apps: {

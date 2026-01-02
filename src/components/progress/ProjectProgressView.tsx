@@ -164,7 +164,7 @@ export function ProjectProgressView() {
 
 	return (
 		<div className="h-full flex flex-col">
-			<div className="drag-region flex border-b border-border p-2 px-4 justify-between">
+			<div className="drag-region flex items-start justify-between gap-4 border-b border-border p-2 px-4">
 				<div className="flex flex-col">
 					<h1 className="text-lg font-semibold">Project progress</h1>
 					<p className="text-sm text-muted-foreground">

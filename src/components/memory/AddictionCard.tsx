@@ -2,8 +2,13 @@ import { Flame, TrendingDown, TrendingUp } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import type { AddictionStats } from "@/hooks/useAddictionStats";
-import { formatDurationCompact, formatRelativeTime } from "@/lib/utils";
+import { cn, formatDurationCompact, formatRelativeTime } from "@/lib/utils";
 import type { Memory } from "@/types";
+
+function isNsfwAddiction(content: string): boolean {
+	const v = content.toLowerCase();
+	return v.includes("porn") || v.includes("nsfw");
+}
 
 interface AddictionCardProps {
 	addiction: Memory;
@@ -35,6 +40,10 @@ export function AddictionCard({
 	const imagePath = candidates[idx] ?? null;
 	const weekCount = stats?.weekCount ?? 0;
 	const delta = weekCount - (stats?.prevWeekCount ?? 0);
+	const isNsfw = useMemo(
+		() => isNsfwAddiction(addiction.content),
+		[addiction.content],
+	);
 	const cleanLabel = useMemo(() => {
 		if (!stats?.lastIncidentAt) return null;
 		const ms = Date.now() - stats.lastIncidentAt;
@@ -56,7 +65,7 @@ export function AddictionCard({
 					<img
 						src={`local-file://${imagePath}`}
 						alt=""
-						className="w-full h-full object-cover"
+						className={cn("w-full h-full object-cover", isNsfw && "blur-md")}
 						loading="lazy"
 						draggable={false}
 						onError={() => {
@@ -72,27 +81,29 @@ export function AddictionCard({
 					</>
 				)}
 
-				<div className="absolute top-3 right-3 flex flex-col items-end gap-2">
-					<Badge className="bg-black/60 backdrop-blur-md border border-white/10 text-white font-medium">
+				<div className="absolute top-2 right-2 flex flex-col items-end gap-1.5">
+					<Badge className="bg-black/60 backdrop-blur-md border border-white/10 text-white font-medium text-xs">
 						{weekCount} · 7d
 						{delta !== 0 ? (
-							<span className="ml-2 inline-flex items-center gap-1 text-[11px]">
+							<span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px]">
 								{delta < 0 ? (
-									<TrendingDown className="h-3 w-3 opacity-80" />
+									<TrendingDown className="h-2.5 w-2.5 opacity-80" />
 								) : (
-									<TrendingUp className="h-3 w-3 opacity-80" />
+									<TrendingUp className="h-2.5 w-2.5 opacity-80" />
 								)}
 								{formatSignedInt(delta)}
 							</span>
 						) : null}
 					</Badge>
+				</div>
 
+				<div className="absolute bottom-2 right-2 flex flex-col items-start gap-1.5">
 					{cleanLabel ? (
-						<Badge className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+						<Badge className="bg-green-800/80 text-white border-none text-xs font-medium shadow-sm">
 							Clean {cleanLabel}
 						</Badge>
 					) : (
-						<Badge className="bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+						<Badge className="bg-green-800/80 text-white border-none text-xs font-medium shadow-sm">
 							No incidents
 						</Badge>
 					)}

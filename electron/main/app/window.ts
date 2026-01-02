@@ -76,7 +76,7 @@ export function createWindow(options?: {
 		minHeight: 600,
 		show: false,
 		titleBarStyle: "hiddenInset",
-		trafficLightPosition: { x: 7, y: 13 },
+		// trafficLightPosition: { x: 7, y: 13 },
 		backgroundColor: "#0E0E0E",
 		webPreferences: {
 			preload: join(__dirname, "../preload/index.cjs"),

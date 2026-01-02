@@ -6,6 +6,12 @@ import type {
 	PolicyResult,
 } from "./types";
 
+function hostImpliesPorn(urlHost: string | null | undefined): boolean {
+	const host = (urlHost ?? "").trim().toLowerCase();
+	if (!host) return false;
+	return host.includes("porn") || host.includes("nsfw");
+}
+
 function mergeRule(base: PolicyResult, rule: AutomationRule): PolicyResult {
 	const overrides: PolicyOverrides = { ...base.overrides };
 
@@ -39,9 +45,17 @@ export function evaluateAutomationPolicy(
 		overrides: {},
 	};
 
-	if (!rules) {
-		return result;
+	if (
+		hostImpliesPorn(input.urlHost) &&
+		result.overrides.category === undefined
+	) {
+		result = {
+			...result,
+			overrides: { ...result.overrides, category: "Leisure" },
+		};
 	}
+
+	if (!rules) return result;
 
 	if (input.appBundleId) {
 		const appRule = rules.apps[input.appBundleId];
