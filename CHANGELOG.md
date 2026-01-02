@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/yahorbarkouski/screencap/compare/v1.1.0...v1.2.0) (2026-01-02)
+
+
+### Features
+
+* local llm alpha ([6ca6400](https://github.com/yahorbarkouski/screencap/commit/6ca640090be6cf5ac135974ea9158837d5245a43))
+
 # [1.1.0](https://github.com/yahorbarkouski/screencap/compare/v1.0.2...v1.1.0) (2026-01-01)
 
 
