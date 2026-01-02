@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/yahorbarkouski/screencap/compare/v1.2.0...v1.3.0) (2026-01-02)
+
+
+### Features
+
+* better onboarding, public alpha ([641dda4](https://github.com/yahorbarkouski/screencap/commit/641dda4ea1b3d15e935b203b9c2a7bbd1f97518a))
+
 # [1.2.0](https://github.com/yahorbarkouski/screencap/compare/v1.1.0...v1.2.0) (2026-01-02)
 
 
