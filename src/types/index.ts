@@ -137,7 +137,6 @@ export interface Settings {
 	localLlmEnabled: boolean;
 	localLlmBaseUrl: string;
 	localLlmModel: string;
-	sessionSummaryEnabled: boolean;
 }
 
 export interface ProjectRepo {
@@ -163,7 +162,6 @@ export interface RepoWorkSession {
 	maxDeletions: number;
 	files: string[];
 	updatedAt: number;
-	summary: string | null;
 }
 
 export interface GitCommit {
@@ -521,10 +519,6 @@ declare global {
 					startAt: number;
 					endAt: number;
 				}) => Promise<string>;
-				generateSessionSummary: (options: {
-					sessionId: string;
-					projectName: string;
-				}) => Promise<string | null>;
 			};
 			llm: {
 				classify: (imageBase64: string) => Promise<unknown>;

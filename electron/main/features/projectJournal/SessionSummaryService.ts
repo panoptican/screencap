@@ -95,9 +95,10 @@ async function callNanoModel(messages: unknown[]): Promise<string> {
 export async function generateSessionSummary(
 	sessionId: string,
 	commits: GitCommit[],
+	force = false,
 ): Promise<string | null> {
 	const settings = getSettings();
-	if (!settings.sessionSummaryEnabled) {
+	if (!force && !settings.sessionSummaryEnabled) {
 		return null;
 	}
 
@@ -152,5 +153,5 @@ export async function getOrGenerateSessionSummary(
 		return session.summary;
 	}
 
-	return generateSessionSummary(sessionId, commits);
+	return generateSessionSummary(sessionId, commits, true);
 }

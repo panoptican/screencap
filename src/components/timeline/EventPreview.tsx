@@ -631,38 +631,60 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 
 						{(event.contentKind || event.urlHost) && (
 							<div className="p-3 rounded-lg bg-muted/50 space-y-2">
-								<div className="flex items-center gap-2 text-sm">
-									{event.faviconPath && event.urlHost ? (
-										<img
-											src={`local-file://${event.faviconPath}`}
-											alt=""
-											className="h-4 w-4 rounded-sm object-contain"
-											loading="lazy"
-										/>
-									) : event.contentKind?.includes("youtube") ||
-										event.contentKind?.includes("netflix") ||
-										event.contentKind?.includes("twitch") ? (
-										<MonitorPlay className="h-4 w-4 text-primary" />
-									) : (
-										<Globe className="h-4 w-4 text-primary" />
+								<div className="grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-3">
+									<div className="flex items-center justify-center">
+										{event.faviconPath && event.urlHost ? (
+											<img
+												src={`local-file://${event.faviconPath}`}
+												alt=""
+												className="h-4 w-4 rounded-sm object-contain"
+												loading="lazy"
+											/>
+										) : event.contentKind?.includes("youtube") ||
+											event.contentKind?.includes("netflix") ||
+											event.contentKind?.includes("twitch") ? (
+											<MonitorPlay className="h-4 w-4 text-primary" />
+										) : (
+											<Globe className="h-4 w-4 text-primary" />
+										)}
+									</div>
+									<div className="min-w-0">
+										<div className="flex items-center gap-2 text-sm">
+											<span className="font-medium">
+												{formatContentKind(event.contentKind) ||
+													"Web Activity"}
+											</span>
+										</div>
+										{event.contentTitle && (
+											<p className="text-sm mt-1">{event.contentTitle}</p>
+										)}
+										{event.contentId && event.contentKind !== "web_page" && (
+											<p className="text-xs text-muted-foreground mt-0.5">
+												ID: {event.contentId}
+											</p>
+										)}
+										{event.urlHost && (
+											<p className="text-xs text-muted-foreground mt-0.5">
+												{event.urlHost}
+											</p>
+										)}
+									</div>
+									{event.urlCanonical && (
+										<Button
+											variant="outline"
+											size="sm"
+											className="flex-shrink-0"
+											onClick={() =>
+												void window.api.app.openExternal(
+													event.urlCanonical!,
+												)
+											}
+										>
+											<ExternalLink />
+											Open
+										</Button>
 									)}
-									<span className="font-medium">
-										{formatContentKind(event.contentKind) || "Web Activity"}
-									</span>
 								</div>
-								{event.contentTitle && (
-									<p className="text-sm">{event.contentTitle}</p>
-								)}
-								{event.contentId && event.contentKind !== "web_page" && (
-									<p className="text-xs text-muted-foreground">
-										ID: {event.contentId}
-									</p>
-								)}
-								{event.urlHost && (
-									<p className="text-xs text-muted-foreground">
-										{event.urlHost}
-									</p>
-								)}
 							</div>
 						)}
 
