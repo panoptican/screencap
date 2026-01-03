@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/yahorbarkouski/screencap/compare/v1.4.0...v1.5.0) (2026-01-03)
+
+
+### Features
+
+* eod, sharing ([a1cb2f5](https://github.com/yahorbarkouski/screencap/commit/a1cb2f5086efa2ce4dd00b918c163990dbf9cb73))
+
 # [1.4.0](https://github.com/yahorbarkouski/screencap/compare/v1.3.2...v1.4.0) (2026-01-03)
 
 
