@@ -1,3 +1,10 @@
+# [1.7.0](https://github.com/yahorbarkouski/screencap/compare/v1.6.0...v1.7.0) (2026-01-04)
+
+
+### Features
+
+* shared projects ([964f908](https://github.com/yahorbarkouski/screencap/commit/964f908b85bb9ece6264a5410d3fe5db44d1c5c6))
+
 # [1.6.0](https://github.com/yahorbarkouski/screencap/compare/v1.5.0...v1.6.0) (2026-01-04)
 
 
