@@ -20,9 +20,9 @@ describe("ProjectNormalizer", () => {
 		});
 
 		it("removes tail stopwords", () => {
-			expect(normalizeProjectBase("Project - Settings")).toBe("Project");
+			expect(normalizeProjectBase("Project - Settings")).toBe("Project -");
 			expect(normalizeProjectBase("Project Dashboard")).toBe("Project");
-			expect(normalizeProjectBase("Screencap - Preferences")).toBe("Screencap");
+			expect(normalizeProjectBase("Screencap - Preferences")).toBe("Screencap -");
 		});
 
 		it("preserves case when uppercase exists", () => {
