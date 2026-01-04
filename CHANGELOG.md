@@ -1,3 +1,10 @@
+# [1.6.0](https://github.com/yahorbarkouski/screencap/compare/v1.5.0...v1.6.0) (2026-01-04)
+
+
+### Features
+
+* social ([1b7454e](https://github.com/yahorbarkouski/screencap/commit/1b7454e4f829cbea88a53d3a681e8ba3cd4c974b))
+
 # [1.5.0](https://github.com/yahorbarkouski/screencap/compare/v1.4.0...v1.5.0) (2026-01-03)
 
 
