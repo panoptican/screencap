@@ -132,6 +132,66 @@ export function createTables(db: Database.Database): void {
       updated_at INTEGER NOT NULL,
       last_published_at INTEGER
     );
+
+    CREATE TABLE IF NOT EXISTS project_room_links (
+      project_name TEXT PRIMARY KEY,
+      room_id TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS room_keys_cache (
+      room_id TEXT PRIMARY KEY,
+      room_key_enc TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS social_account (
+      user_id TEXT PRIMARY KEY,
+      device_id TEXT NOT NULL,
+      username TEXT NOT NULL,
+      enc_private_keys_json TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS friends_cache (
+      friend_user_id TEXT PRIMARY KEY,
+      username TEXT NOT NULL,
+      last_seen INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS room_events_cache (
+      room_id TEXT NOT NULL,
+      event_id TEXT NOT NULL,
+      timestamp_ms INTEGER NOT NULL,
+      author_id TEXT NOT NULL,
+      payload_ciphertext TEXT NOT NULL,
+      image_cache_path TEXT,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY(room_id, event_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS chat_threads_cache (
+      thread_id TEXT PRIMARY KEY,
+      kind TEXT NOT NULL,
+      room_id TEXT,
+      title TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS chat_messages_cache (
+      thread_id TEXT NOT NULL,
+      message_id TEXT NOT NULL,
+      timestamp_ms INTEGER NOT NULL,
+      author_user_id TEXT NOT NULL,
+      ciphertext TEXT NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY(thread_id, message_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS chat_unread_state (
+      thread_id TEXT PRIMARY KEY,
+      last_read_timestamp_ms INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
   `);
 
 	logger.info("Tables created");
@@ -165,6 +225,11 @@ export function createIndexes(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_eod_entries_day_start ON eod_entries(day_start);
     CREATE INDEX IF NOT EXISTS idx_eod_entries_submitted_at ON eod_entries(submitted_at);
     CREATE INDEX IF NOT EXISTS idx_project_shares_public_id ON project_shares(public_id);
+    CREATE INDEX IF NOT EXISTS idx_project_room_links_room_id ON project_room_links(room_id);
+    CREATE INDEX IF NOT EXISTS idx_room_keys_cache_updated_at ON room_keys_cache(updated_at);
+    CREATE INDEX IF NOT EXISTS idx_friends_cache_last_seen ON friends_cache(last_seen);
+    CREATE INDEX IF NOT EXISTS idx_room_events_cache_room_timestamp ON room_events_cache(room_id, timestamp_ms);
+    CREATE INDEX IF NOT EXISTS idx_chat_messages_cache_thread_timestamp ON chat_messages_cache(thread_id, timestamp_ms);
   `);
 
 	logger.info("Indexes created");

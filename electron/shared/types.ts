@@ -498,3 +498,72 @@ export interface CreateShareResult {
 	writeKey: string;
 	shareUrl: string;
 }
+
+export interface SocialIdentity {
+	userId: string;
+	deviceId: string;
+	username: string;
+}
+
+export interface Friend {
+	userId: string;
+	username: string;
+	deviceId: string | null;
+	dhPubKey: string | null;
+	createdAt: number;
+}
+
+export interface FriendRequest {
+	id: string;
+	fromUserId: string;
+	fromUsername: string;
+	toUserId: string;
+	toUsername: string;
+	status: "pending" | "accepted" | "rejected";
+	createdAt: number;
+	respondedAt: number | null;
+}
+
+export interface ChatThread {
+	id: string;
+	kind: "dm" | "project";
+	roomId: string | null;
+	title: string;
+	createdAt: number;
+}
+
+export interface ChatMessage {
+	id: string;
+	threadId: string;
+	authorUserId: string;
+	timestampMs: number;
+	text: string;
+}
+
+export interface Room {
+	id: string;
+	kind: "project";
+	name: string;
+	visibility: "private" | "public";
+	role: "owner" | "member";
+	createdBy: string;
+	createdAt: number;
+}
+
+export interface RoomInvite {
+	id: string;
+	roomId: string;
+	roomName: string;
+	fromUserId: string;
+	fromUsername: string;
+	createdAt: number;
+}
+
+export interface RoomTimelineEvent {
+	id: string;
+	roomId: string;
+	authorUserId: string;
+	timestampMs: number;
+	caption: string | null;
+	imageRef: string | null;
+}

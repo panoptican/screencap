@@ -81,6 +81,21 @@ export function updateProjectShareLastPublished(
 	).run(lastPublishedAt, Date.now(), projectName);
 }
 
+export function updateProjectShareUrl(
+	projectName: string,
+	shareUrl: string,
+): void {
+	if (!isDbOpen()) return;
+	const db = getDatabase();
+	db.prepare(
+		`
+    UPDATE project_shares
+    SET share_url = ?, updated_at = ?
+    WHERE project_name = ?
+  `,
+	).run(shareUrl, Date.now(), projectName);
+}
+
 export function deleteProjectShare(projectName: string): void {
 	if (!isDbOpen()) return;
 	const db = getDatabase();

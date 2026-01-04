@@ -1,5 +1,6 @@
 export { registerAppHandlers } from "./app";
 export { registerCaptureHandlers } from "./capture";
+export { registerChatHandlers } from "./chat";
 export { registerEodHandlers } from "./eod";
 export { registerLLMHandlers } from "./llm";
 export { registerOcrHandlers } from "./ocr";
@@ -7,9 +8,11 @@ export { registerPermissionHandlers } from "./permissions";
 export { registerPopupHandlers } from "./popup";
 export { registerProjectJournalHandlers } from "./projectJournal";
 export { registerPublishingHandlers } from "./publishing";
+export { registerRoomsHandlers } from "./rooms";
 export { registerSchedulerHandlers } from "./scheduler";
 export { registerSettingsHandlers } from "./settings";
 export { registerShortcutsHandlers } from "./shortcuts";
+export { registerSocialHandlers } from "./social";
 export { registerStorageHandlers } from "./storage";
 export { registerUpdateHandlers } from "./update";
 export { registerWindowHandlers } from "./window";

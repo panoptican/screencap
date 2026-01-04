@@ -8,6 +8,8 @@ import type {
 	CaptureTriggerOptions,
 	CaptureTriggerResult,
 	CategoryStats,
+	ChatMessage,
+	ChatThread,
 	ClassificationResult,
 	ClearableStorageCategory,
 	ContextStatus,
@@ -18,6 +20,8 @@ import type {
 	Event,
 	EventScreenshot,
 	EventSummary,
+	Friend,
+	FriendRequest,
 	GetEventsOptions,
 	GetTimelineFacetsOptions,
 	GitCommit,
@@ -30,7 +34,11 @@ import type {
 	ProjectShare,
 	ProjectStatsItem,
 	RecordedApp,
+	Room,
+	RoomInvite,
+	RoomTimelineEvent,
 	Settings,
+	SocialIdentity,
 	StorageUsageBreakdown,
 	Story,
 	StoryInput,
@@ -282,6 +290,86 @@ const api = {
 			ipcRenderer.invoke(IpcChannels.Publishing.SyncShare, projectName),
 	},
 
+	social: {
+		getIdentity: (): Promise<SocialIdentity | null> =>
+			ipcRenderer.invoke(IpcChannels.Social.GetIdentity),
+		registerUsername: (username: string): Promise<SocialIdentity> =>
+			ipcRenderer.invoke(IpcChannels.Social.RegisterUsername, username),
+		sendFriendRequest: (
+			toUsername: string,
+		): Promise<{ requestId: string; status: "pending" | "accepted" }> =>
+			ipcRenderer.invoke(IpcChannels.Social.SendFriendRequest, toUsername),
+		listFriends: (): Promise<Friend[]> =>
+			ipcRenderer.invoke(IpcChannels.Social.ListFriends),
+		listFriendRequests: (): Promise<FriendRequest[]> =>
+			ipcRenderer.invoke(IpcChannels.Social.ListFriendRequests),
+		acceptFriendRequest: (requestId: string): Promise<void> =>
+			ipcRenderer.invoke(IpcChannels.Social.AcceptFriendRequest, requestId),
+		rejectFriendRequest: (requestId: string): Promise<void> =>
+			ipcRenderer.invoke(IpcChannels.Social.RejectFriendRequest, requestId),
+	},
+
+	chat: {
+		listThreads: (): Promise<ChatThread[]> =>
+			ipcRenderer.invoke(IpcChannels.Chat.ListThreads),
+		openDmThread: (friendUserId: string): Promise<string> =>
+			ipcRenderer.invoke(IpcChannels.Chat.OpenDmThread, friendUserId),
+		openProjectThread: (roomId: string): Promise<string> =>
+			ipcRenderer.invoke(IpcChannels.Chat.OpenProjectThread, roomId),
+		fetchMessages: (
+			threadId: string,
+			since?: number,
+		): Promise<ChatMessage[]> => {
+			if (since !== undefined) {
+				return ipcRenderer.invoke(
+					IpcChannels.Chat.FetchMessages,
+					threadId,
+					since,
+				);
+			}
+			return ipcRenderer.invoke(IpcChannels.Chat.FetchMessages, threadId);
+		},
+		sendMessage: (threadId: string, text: string): Promise<void> =>
+			ipcRenderer.invoke(IpcChannels.Chat.SendMessage, threadId, text),
+	},
+
+	rooms: {
+		ensureProjectRoom: (projectName: string): Promise<string> =>
+			ipcRenderer.invoke(IpcChannels.Rooms.EnsureProjectRoom, projectName),
+		inviteFriendToProjectRoom: (
+			projectName: string,
+			friendUserId: string,
+		): Promise<void> =>
+			ipcRenderer.invoke(
+				IpcChannels.Rooms.InviteFriendToProjectRoom,
+				projectName,
+				friendUserId,
+			),
+		listRooms: (): Promise<Room[]> =>
+			ipcRenderer.invoke(IpcChannels.Rooms.ListRooms),
+		listInvites: (): Promise<RoomInvite[]> =>
+			ipcRenderer.invoke(IpcChannels.Rooms.ListInvites),
+		acceptProjectInvite: (roomId: string, projectName: string): Promise<void> =>
+			ipcRenderer.invoke(
+				IpcChannels.Rooms.AcceptProjectInvite,
+				roomId,
+				projectName,
+			),
+		fetchRoomEvents: (
+			roomId: string,
+			since?: number,
+		): Promise<RoomTimelineEvent[]> => {
+			if (since !== undefined) {
+				return ipcRenderer.invoke(
+					IpcChannels.Rooms.FetchRoomEvents,
+					roomId,
+					since,
+				);
+			}
+			return ipcRenderer.invoke(IpcChannels.Rooms.FetchRoomEvents, roomId);
+		},
+	},
+
 	on: (channel: string, callback: (...args: unknown[]) => void) => {
 		if (!allowedEventChannels.has(channel)) {
 			throw new Error("Invalid event channel");
@@ -309,6 +397,14 @@ export {
 	type ProjectRepo,
 	type ProjectShare,
 	type CreateShareResult,
+	type SocialIdentity,
+	type Friend,
+	type FriendRequest,
+	type ChatThread,
+	type ChatMessage,
+	type Room,
+	type RoomInvite,
+	type RoomTimelineEvent,
 	type Settings,
 	type Story,
 	type PermissionStatus,

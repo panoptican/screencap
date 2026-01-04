@@ -414,6 +414,75 @@ export interface CreateShareResult {
 	shareUrl: string;
 }
 
+export interface SocialIdentity {
+	userId: string;
+	deviceId: string;
+	username: string;
+}
+
+export interface Friend {
+	userId: string;
+	username: string;
+	deviceId: string | null;
+	dhPubKey: string | null;
+	createdAt: number;
+}
+
+export interface FriendRequest {
+	id: string;
+	fromUserId: string;
+	fromUsername: string;
+	toUserId: string;
+	toUsername: string;
+	status: "pending" | "accepted" | "rejected";
+	createdAt: number;
+	respondedAt: number | null;
+}
+
+export interface ChatThread {
+	id: string;
+	kind: "dm" | "project";
+	roomId: string | null;
+	title: string;
+	createdAt: number;
+}
+
+export interface ChatMessage {
+	id: string;
+	threadId: string;
+	authorUserId: string;
+	timestampMs: number;
+	text: string;
+}
+
+export interface Room {
+	id: string;
+	kind: "project";
+	name: string;
+	visibility: "private" | "public";
+	role: "owner" | "member";
+	createdBy: string;
+	createdAt: number;
+}
+
+export interface RoomInvite {
+	id: string;
+	roomId: string;
+	roomName: string;
+	fromUserId: string;
+	fromUsername: string;
+	createdAt: number;
+}
+
+export interface RoomTimelineEvent {
+	id: string;
+	roomId: string;
+	authorUserId: string;
+	timestampMs: number;
+	caption: string | null;
+	imageRef: string | null;
+}
+
 declare global {
 	interface Window {
 		api: {
@@ -596,6 +665,44 @@ declare global {
 				getShare: (projectName: string) => Promise<ProjectShare | null>;
 				disableShare: (projectName: string) => Promise<void>;
 				syncShare: (projectName: string) => Promise<number>;
+			};
+			social: {
+				getIdentity: () => Promise<SocialIdentity | null>;
+				registerUsername: (username: string) => Promise<SocialIdentity>;
+				sendFriendRequest: (
+					toUsername: string,
+				) => Promise<{ requestId: string; status: "pending" | "accepted" }>;
+				listFriends: () => Promise<Friend[]>;
+				listFriendRequests: () => Promise<FriendRequest[]>;
+				acceptFriendRequest: (requestId: string) => Promise<void>;
+				rejectFriendRequest: (requestId: string) => Promise<void>;
+			};
+			chat: {
+				listThreads: () => Promise<ChatThread[]>;
+				openDmThread: (friendUserId: string) => Promise<string>;
+				openProjectThread: (roomId: string) => Promise<string>;
+				fetchMessages: (
+					threadId: string,
+					since?: number,
+				) => Promise<ChatMessage[]>;
+				sendMessage: (threadId: string, text: string) => Promise<void>;
+			};
+			rooms: {
+				ensureProjectRoom: (projectName: string) => Promise<string>;
+				inviteFriendToProjectRoom: (
+					projectName: string,
+					friendUserId: string,
+				) => Promise<void>;
+				listRooms: () => Promise<Room[]>;
+				listInvites: () => Promise<RoomInvite[]>;
+				acceptProjectInvite: (
+					roomId: string,
+					projectName: string,
+				) => Promise<void>;
+				fetchRoomEvents: (
+					roomId: string,
+					since?: number,
+				) => Promise<RoomTimelineEvent[]>;
 			};
 			on: (
 				channel:

@@ -1,3 +1,4 @@
+import { getLogicalDayStart } from "../../../shared/dayBoundary";
 import { IpcChannels, IpcEvents } from "../../../shared/ipc";
 import type { EodEntryInput } from "../../../shared/types";
 import { showMainWindow } from "../../app/window";
@@ -15,19 +16,13 @@ import {
 	ipcEodUpsertEntryArgs,
 } from "../validation";
 
-function startOfLocalDayMs(timestamp: number): number {
-	const d = new Date(timestamp);
-	d.setHours(0, 0, 0, 0);
-	return d.getTime();
-}
-
 export function registerEodHandlers(): void {
 	secureHandle(
 		IpcChannels.Eod.OpenFlow,
 		ipcEodOpenFlowArgs,
 		(options?: { dayStart?: number }) => {
 			showMainWindow();
-			const dayStart = startOfLocalDayMs(options?.dayStart ?? Date.now());
+			const dayStart = getLogicalDayStart(options?.dayStart ?? Date.now());
 			broadcast(IpcEvents.ShortcutEndOfDay, { dayStart });
 		},
 	);

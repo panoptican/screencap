@@ -16,6 +16,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useMemories } from "@/hooks/useMemories";
 import { usePermission } from "@/hooks/usePermission";
 import { useSettings } from "@/hooks/useSettings";
+import { getLogicalDayStart } from "@/lib/dayBoundary";
 import { useAppStore } from "@/stores/app";
 
 const ONBOARDING_VERSION = 1;
@@ -79,7 +80,7 @@ export default function App() {
 				"dayStart" in payload &&
 				typeof (payload as { dayStart?: unknown }).dayStart === "number"
 					? (payload as { dayStart: number }).dayStart
-					: new Date(new Date().setHours(0, 0, 0, 0)).getTime();
+					: getLogicalDayStart(Date.now());
 			openEod(dayStart);
 		});
 	}, [openEod]);

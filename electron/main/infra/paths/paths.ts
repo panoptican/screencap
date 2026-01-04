@@ -26,6 +26,10 @@ export function getSettingsPath(): string {
 	return join(getUserDataPath(), "settings.json");
 }
 
+export function getSocialAccountPath(): string {
+	return join(getUserDataPath(), "social-account.json");
+}
+
 export function getScreenshotsDir(): string {
 	return ensureDir(join(getUserDataPath(), "screenshots"));
 }

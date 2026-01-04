@@ -13,6 +13,7 @@ import { ensureFavicon } from "../../features/favicons/FaviconService";
 import { normalizeProjectsInDb } from "../../features/projects";
 import { publishEvent } from "../../features/publishing/PublishingService";
 import { triggerQueueProcess } from "../../features/queue";
+import { publishProgressEventToRoom } from "../../features/sync/RoomSyncService";
 import {
 	confirmAddiction,
 	deleteEvent,
@@ -222,7 +223,18 @@ export function registerStorageHandlers(): void {
 			updateEvent(input.id, { caption, project });
 			broadcastEventUpdated(input.id);
 
-			void publishEvent(input.id);
+			void publishEvent(input.id).catch((error) => {
+				logger.warn("Publish to public share failed", {
+					eventId: input.id,
+					error: String(error),
+				});
+			});
+			void publishProgressEventToRoom(input.id).catch((error) => {
+				logger.warn("Publish to room failed", {
+					eventId: input.id,
+					error: String(error),
+				});
+			});
 
 			if (event.status !== "pending") return;
 			if (!event.originalPath || !existsSync(event.originalPath)) return;

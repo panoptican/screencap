@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { extname } from "node:path";
+import { safeStorage } from "electron";
 import FormData from "form-data";
 import type { CreateShareResult, ProjectShare } from "../../../shared/types";
 import { getEventById } from "../../infra/db/repositories/EventRepository";
@@ -8,9 +9,21 @@ import {
 	getProjectShare,
 	insertProjectShare,
 	updateProjectShareLastPublished,
+	updateProjectShareUrl,
 } from "../../infra/db/repositories/ProjectShareRepository";
+import {
+	getRoomKeyCache,
+	upsertRoomKeyCache,
+} from "../../infra/db/repositories/RoomKeysCacheRepository";
 import { createLogger } from "../../infra/log";
-import { PUBLISH_BASE_URL } from "./config";
+import {
+	decodeRoomKeyB64,
+	encodeRoomKeyB64,
+	encryptRoomEventPayload,
+	encryptRoomImageBytes,
+	generateRoomKey,
+} from "../rooms/RoomCrypto";
+import { getIdentity, signedFetch } from "../social/IdentityService";
 
 const logger = createLogger({ scope: "PublishingService" });
 
@@ -55,6 +68,120 @@ function getUploadablePath(originalPath: string | null): string | null {
 	return null;
 }
 
+type StoredSecret = { scheme: "safeStorage" | "plain"; payload: string };
+
+function decodeSecret(encoded: string): StoredSecret | null {
+	try {
+		const parsed = JSON.parse(encoded) as Partial<StoredSecret>;
+		if (
+			(parsed.scheme !== "safeStorage" && parsed.scheme !== "plain") ||
+			typeof parsed.payload !== "string"
+		) {
+			return null;
+		}
+		return { scheme: parsed.scheme, payload: parsed.payload };
+	} catch {
+		return null;
+	}
+}
+
+function decryptSecret(secret: StoredSecret): string | null {
+	try {
+		if (secret.scheme === "plain") return secret.payload;
+		return safeStorage.decryptString(Buffer.from(secret.payload, "base64"));
+	} catch {
+		return null;
+	}
+}
+
+function decodeBase64UrlToBase64(b64url: string): string {
+	const b64 = b64url.replace(/-/g, "+").replace(/_/g, "/");
+	const pad = b64.length % 4 === 0 ? "" : "=".repeat(4 - (b64.length % 4));
+	return `${b64}${pad}`;
+}
+
+function encodeBase64ToBase64Url(b64: string): string {
+	return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function encodeRoomKeyForCache(roomKeyB64: string): string {
+	return JSON.stringify({
+		scheme: safeStorage.isEncryptionAvailable() ? "safeStorage" : "plain",
+		payload: safeStorage.isEncryptionAvailable()
+			? safeStorage.encryptString(roomKeyB64).toString("base64")
+			: roomKeyB64,
+	});
+}
+
+function getRoomKeyForShare(share: ProjectShare): Buffer | null {
+	const cached = getRoomKeyCache(share.publicId);
+	if (cached) {
+		const secret = decodeSecret(cached.roomKeyEnc);
+		const decrypted = secret ? decryptSecret(secret) : null;
+		if (decrypted) return decodeRoomKeyB64(decrypted);
+	}
+
+	let url: URL;
+	try {
+		url = new URL(share.shareUrl);
+	} catch {
+		return null;
+	}
+
+	const hash = url.hash.startsWith("#") ? url.hash.slice(1) : url.hash;
+	const params = new URLSearchParams(hash);
+	const k = params.get("k");
+	if (!k) return null;
+
+	try {
+		const roomKeyB64 = decodeBase64UrlToBase64(k);
+		const roomKey = decodeRoomKeyB64(roomKeyB64);
+		const roomKeyEnc = JSON.stringify({
+			scheme: safeStorage.isEncryptionAvailable() ? "safeStorage" : "plain",
+			payload: safeStorage.isEncryptionAvailable()
+				? safeStorage.encryptString(roomKeyB64).toString("base64")
+				: roomKeyB64,
+		});
+		upsertRoomKeyCache({
+			roomId: share.publicId,
+			roomKeyEnc,
+			updatedAt: Date.now(),
+		});
+		return roomKey;
+	} catch {
+		return null;
+	}
+}
+
+function ensureRoomKeyForShare(
+	share: ProjectShare,
+): { roomKey: Buffer; shareUrl: string } | null {
+	const existing = getRoomKeyForShare(share);
+	if (existing) return { roomKey: existing, shareUrl: share.shareUrl };
+
+	let url: URL;
+	try {
+		url = new URL(share.shareUrl);
+	} catch {
+		return null;
+	}
+
+	const roomKey = generateRoomKey();
+	const roomKeyB64 = encodeRoomKeyB64(roomKey);
+	const roomKeyEnc = encodeRoomKeyForCache(roomKeyB64);
+	upsertRoomKeyCache({
+		roomId: share.publicId,
+		roomKeyEnc,
+		updatedAt: Date.now(),
+	});
+
+	url.hash = `k=${encodeBase64ToBase64Url(roomKeyB64)}`;
+	const shareUrl = url.toString();
+	updateProjectShareUrl(share.projectName, shareUrl);
+
+	return { roomKey, shareUrl };
+}
+
 export async function createShare(
 	projectName: string,
 ): Promise<CreateShareResult> {
@@ -67,7 +194,11 @@ export async function createShare(
 		};
 	}
 
-	const response = await fetch(`${PUBLISH_BASE_URL}/api/published-projects`, {
+	if (!getIdentity()) {
+		throw new Error("Register a username in the tray popup to enable sharing");
+	}
+
+	const response = await signedFetch("/api/published-projects", {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify({ name: projectName }),
@@ -80,11 +211,23 @@ export async function createShare(
 
 	const result = (await response.json()) as CreateShareResult;
 
+	const roomKey = generateRoomKey();
+	const roomKeyB64 = encodeRoomKeyB64(roomKey);
+	const roomKeyEnc = encodeRoomKeyForCache(roomKeyB64);
+	upsertRoomKeyCache({
+		roomId: result.publicId,
+		roomKeyEnc,
+		updatedAt: Date.now(),
+	});
+
+	const keyB64Url = encodeBase64ToBase64Url(roomKeyB64);
+	const shareUrl = `${result.shareUrl}#k=${keyB64Url}`;
+
 	const share: ProjectShare = {
 		projectName,
 		publicId: result.publicId,
 		writeKey: result.writeKey,
-		shareUrl: result.shareUrl,
+		shareUrl,
 		createdAt: Date.now(),
 		updatedAt: Date.now(),
 		lastPublishedAt: null,
@@ -93,7 +236,7 @@ export async function createShare(
 	insertProjectShare(share);
 	logger.info("Created share", { projectName, publicId: result.publicId });
 
-	return result;
+	return { ...result, shareUrl };
 }
 
 export function getShare(projectName: string): ProjectShare | null {
@@ -186,27 +329,42 @@ async function uploadEvent(params: {
 				: "image/webp";
 
 	const imageBuffer = readFileSync(imagePath);
+	const ensured = ensureRoomKeyForShare(share);
+	if (!ensured) {
+		throw new Error("Missing room key for share");
+	}
 
 	const formData = new FormData();
 	formData.append("eventId", eventId);
 	formData.append("timestampMs", String(timestampMs));
-	if (caption) {
-		formData.append("caption", caption);
-	}
-	formData.append("file", imageBuffer, {
+	const payloadCiphertext = encryptRoomEventPayload({
+		roomKey: ensured.roomKey,
+		payloadJsonUtf8: Buffer.from(
+			JSON.stringify({ v: 1, caption, image: { mime: mimeType } }),
+			"utf8",
+		),
+	});
+	const encryptedImage = encryptRoomImageBytes({
+		roomKey: ensured.roomKey,
+		plaintextBytes: imageBuffer,
+	});
+	formData.append("payloadCiphertext", payloadCiphertext);
+	formData.append("file", encryptedImage, {
 		filename: `${eventId}.${ext}`,
-		contentType: mimeType,
+		contentType: "application/octet-stream",
 	});
 
-	const response = await fetch(
-		`${PUBLISH_BASE_URL}/api/published-projects/${share.publicId}/events`,
+	const body = formData.getBuffer();
+	const response = await signedFetch(
+		`/api/published-projects/${share.publicId}/events`,
 		{
 			method: "POST",
 			headers: {
-				"x-write-key": share.writeKey,
 				...formData.getHeaders(),
+				"Content-Length": String(body.byteLength),
+				"x-write-key": share.writeKey,
 			},
-			body: formData.getBuffer(),
+			body,
 		},
 	);
 

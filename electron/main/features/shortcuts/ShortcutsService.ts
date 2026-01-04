@@ -1,4 +1,5 @@
 import { app, globalShortcut, type Rectangle, screen } from "electron";
+import { getLogicalDayStart } from "../../../shared/dayBoundary";
 import { IpcEvents } from "../../../shared/ipc";
 import type { Settings, ShortcutSettings } from "../../../shared/types";
 import {
@@ -36,12 +37,6 @@ function normalizeAccelerator(value: string | null | undefined): string | null {
 function cursorAnchor(): Rectangle {
 	const p = screen.getCursorScreenPoint();
 	return { x: p.x, y: p.y, width: 1, height: 1 };
-}
-
-function startOfLocalDayMs(timestamp: number): number {
-	const d = new Date(timestamp);
-	d.setHours(0, 0, 0, 0);
-	return d.getTime();
 }
 
 function getPrimaryDisplayIdFromCursor(): string {
@@ -218,7 +213,7 @@ async function handleCaptureProjectProgress(): Promise<void> {
 async function handleEndOfDay(): Promise<void> {
 	showMainWindow();
 	broadcast(IpcEvents.ShortcutEndOfDay, {
-		dayStart: startOfLocalDayMs(Date.now()),
+		dayStart: getLogicalDayStart(Date.now()),
 	});
 }
 

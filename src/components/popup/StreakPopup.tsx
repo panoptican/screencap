@@ -17,6 +17,7 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ShortcutKbd } from "@/components/ui/shortcut-kbd";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSettings } from "@/hooks/useSettings";
 import { DOT_ALPHA_BY_LEVEL, rgba } from "@/lib/color";
 import {
@@ -27,6 +28,8 @@ import {
 	slotLevel,
 } from "@/lib/dayline";
 import type { Event } from "@/types";
+import { FriendsTab } from "./FriendsTab";
+import { MessagesTab } from "./MessagesTab";
 import { useLockBodyScroll } from "./useLockBodyScroll";
 import { usePopupAutoHeight } from "./usePopupAutoHeight";
 
@@ -170,6 +173,7 @@ export function StreakPopup() {
 	const rootRef = useRef<HTMLDivElement | null>(null);
 	const [isQuitConfirmOpen, setIsQuitConfirmOpen] = useState(false);
 	const [daylineMode, setDaylineMode] = useState<DaylineViewMode>("categories");
+	const [tab, setTab] = useState<"day" | "friends" | "messages">("day");
 	const [day, setDay] = useState(() => startOfDay(new Date()));
 	const { settings } = useSettings();
 	const todayStartMs = useMemo(() => startOfDay(new Date()).getTime(), []);
@@ -290,6 +294,7 @@ export function StreakPopup() {
 					aria-label={
 						daylineMode === "addiction" ? "Show categories" : "Show addiction"
 					}
+					style={tab === "day" ? undefined : { display: "none" }}
 					className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
 					onClick={() =>
 						setDaylineMode((m) =>
@@ -314,116 +319,138 @@ export function StreakPopup() {
 				</button>
 			</div>
 
-			<div className="mb-3 pr-20">
-				<div className="flex items-center gap-1.5">
-					<div className="font-mono text-[10px] tracking-[0.28em] text-muted-foreground">
-						DAY WRAPPED
+			<Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
+				<TabsList className="grid w-full grid-cols-3 pr-20">
+					<TabsTrigger value="day">Day</TabsTrigger>
+					<TabsTrigger value="friends">Friends</TabsTrigger>
+					<TabsTrigger value="messages">Messages</TabsTrigger>
+				</TabsList>
+
+				<TabsContent value="day" className="mt-4">
+					<div className="mb-3 pr-20">
+						<div className="flex items-center gap-1.5">
+							<div className="font-mono text-[10px] tracking-[0.28em] text-muted-foreground">
+								DAY WRAPPED
+							</div>
+							<button
+								type="button"
+								aria-label="Previous day"
+								className="inline-flex size-4 items-center justify-center rounded-md border border-border bg-background/30 text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
+								onClick={() => setDay((d) => startOfDay(subDays(d, 1)))}
+							>
+								<ChevronLeft className="size-2" />
+							</button>
+
+							<button
+								type="button"
+								aria-label="Next day"
+								disabled={!canGoForward}
+								className={`inline-flex size-4 items-center justify-center rounded-md border border-border bg-background/30 text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground ${canGoForward ? "" : "pointer-events-none opacity-0"}`}
+								onClick={() => setDay((d) => startOfDay(addDays(d, 1)))}
+							>
+								<ChevronRight className="size-2" />
+							</button>
+						</div>
+						<div className="flex mt-0.5 items-center gap-1.5">
+							<div className="text-sm font-medium text-foreground/90 text-center">
+								{titleDate}
+							</div>
+						</div>
 					</div>
-					<button
-						type="button"
-						aria-label="Previous day"
-						className="inline-flex size-4 items-center justify-center rounded-md border border-border bg-background/30 text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
-						onClick={() => setDay((d) => startOfDay(subDays(d, 1)))}
-					>
-						<ChevronLeft className="size-2" />
-					</button>
 
-					<button
-						type="button"
-						aria-label="Next day"
-						disabled={!canGoForward}
-						className={`inline-flex size-4 items-center justify-center rounded-md border border-border bg-background/30 text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground ${canGoForward ? "" : "pointer-events-none opacity-0"}`}
-						onClick={() => setDay((d) => startOfDay(addDays(d, 1)))}
-					>
-						<ChevronRight className="size-2" />
-					</button>
-				</div>
-				<div className="flex mt-0.5 items-center gap-1.5">
-					<div className="text-sm font-medium text-foreground/90 text-center">
-						{titleDate}
-					</div>
-				</div>
-			</div>
-
-			<Dayline
-				slots={slots}
-				mode={daylineMode}
-				currentSlotIdx={currentSlotIdx}
-			/>
-			<div className="mt-3 flex justify-between text-[10px] font-mono tracking-[0.18em] text-muted-foreground">
-				<span>00</span>
-				<span>06</span>
-				<span>12</span>
-				<span>18</span>
-				<span>24</span>
-			</div>
-
-			<DayWrappedLegend slots={slots} mode={daylineMode} />
-
-			<div className="mt-4 space-y-2">
-				<Button
-					size="sm"
-					className="w-full justify-between bg-primary/15 text-primary hover:bg-primary/20"
-					onClick={triggerEndOfDay}
-					disabled={!window.api}
-				>
-					<span>End of day</span>
-					<ShortcutKbd
-						accelerator={settings.shortcuts.endOfDay}
-						className="h-4 px-1 text-[9px] rounded-sm"
+					<Dayline
+						slots={slots}
+						mode={daylineMode}
+						currentSlotIdx={currentSlotIdx}
 					/>
-				</Button>
+					<div className="mt-3 flex justify-between text-[10px] font-mono tracking-[0.18em] text-muted-foreground">
+						<span>00</span>
+						<span>06</span>
+						<span>12</span>
+						<span>18</span>
+						<span>24</span>
+					</div>
 
-				<div className="grid grid-cols-2 gap-2">
-					<Button
-						size="sm"
-						variant="outline"
-						className="w-full hover:bg-primary/10"
-						onClick={() => {
-							window.api?.window.show();
-							window.close();
-						}}
-						disabled={!window.api}
-					>
-						Open app
-					</Button>
+					<DayWrappedLegend slots={slots} mode={daylineMode} />
 
-					<DropdownMenu>
-						<div className="flex w-full">
+					<div className="mt-4 space-y-2">
+						<Button
+							size="sm"
+							className="w-full justify-between bg-primary/15 text-primary hover:bg-primary/20"
+							onClick={triggerEndOfDay}
+							disabled={!window.api}
+						>
+							<span>End of day</span>
+							<ShortcutKbd
+								accelerator={settings.shortcuts.endOfDay}
+								className="h-4 px-1 text-[9px] rounded-sm"
+							/>
+						</Button>
+
+						<div className="grid grid-cols-2 gap-2">
 							<Button
 								size="sm"
-								className="flex-1 justify-center rounded-r-none bg-accent/20 text-accent-foreground hover:bg-accent/30"
-								onClick={triggerCaptureNow}
+								variant="outline"
+								className="w-full hover:bg-primary/10"
+								onClick={() => {
+									window.api?.window.show();
+									window.close();
+								}}
 								disabled={!window.api}
 							>
-								<span>Capture now</span>
+								Open app
 							</Button>
-							<DropdownMenuTrigger asChild>
-								<Button
-									size="sm"
-									className="rounded-l-none px-2 bg-accent/20 text-accent-foreground hover:bg-accent/30 border-l border-border/40"
-									disabled={!window.api}
-									aria-label="Capture options"
+
+							<DropdownMenu>
+								<div className="flex w-full">
+									<Button
+										size="sm"
+										className="flex-1 justify-center rounded-r-none bg-accent/20 text-accent-foreground hover:bg-accent/30"
+										onClick={triggerCaptureNow}
+										disabled={!window.api}
+									>
+										<span>Capture now</span>
+									</Button>
+									<DropdownMenuTrigger asChild>
+										<Button
+											size="sm"
+											className="rounded-l-none px-2 bg-accent/20 text-accent-foreground hover:bg-accent/30 border-l border-border/40"
+											disabled={!window.api}
+											aria-label="Capture options"
+										>
+											<ChevronDown className="size-3" />
+										</Button>
+									</DropdownMenuTrigger>
+								</div>
+								<DropdownMenuContent
+									align="end"
+									side="top"
+									avoidCollisions={false}
 								>
-									<ChevronDown className="size-3" />
-								</Button>
-							</DropdownMenuTrigger>
+									<DropdownMenuItem
+										onSelect={triggerProjectProgressCapture}
+										className="flex items-center justify-between gap-3"
+									>
+										<span>Capture project progress</span>
+										<ShortcutKbd
+											accelerator={settings.shortcuts.captureProjectProgress}
+											className="h-4 px-1 text-[9px] rounded-sm"
+										/>
+									</DropdownMenuItem>
+								</DropdownMenuContent>
+							</DropdownMenu>
 						</div>
-						<DropdownMenuContent align="end" side="top" avoidCollisions={false}>
-							<DropdownMenuItem
-								onSelect={triggerProjectProgressCapture}
-								className="flex items-center justify-between gap-3"
-							>
-								<span>Capture project progress</span>
-								<ShortcutKbd
-									accelerator={settings.shortcuts.captureProjectProgress}
-									className="h-4 px-1 text-[9px] rounded-sm"
-								/>
-							</DropdownMenuItem>
-						</DropdownMenuContent>
-					</DropdownMenu>
-				</div>
-			</div>
+					</div>
+				</TabsContent>
+
+				<TabsContent value="friends" className="mt-4">
+					<FriendsTab />
+				</TabsContent>
+
+				<TabsContent value="messages" className="mt-4">
+					<MessagesTab />
+				</TabsContent>
+			</Tabs>
 		</div>
 	);
 }

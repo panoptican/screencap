@@ -6,6 +6,8 @@ import type {
 	CaptureTriggerOptions,
 	CaptureTriggerResult,
 	CategoryStats,
+	ChatMessage,
+	ChatThread,
 	ClassificationResult,
 	ClearableStorageCategory,
 	ContextStatus,
@@ -16,6 +18,8 @@ import type {
 	Event,
 	EventScreenshot,
 	EventSummary,
+	Friend,
+	FriendRequest,
 	GetEventsOptions,
 	GetTimelineFacetsOptions,
 	GitCommit,
@@ -28,7 +32,11 @@ import type {
 	ProjectShare,
 	ProjectStatsItem,
 	RecordedApp,
+	Room,
+	RoomInvite,
+	RoomTimelineEvent,
 	Settings,
+	SocialIdentity,
 	StorageUsageBreakdown,
 	Story,
 	StoryInput,
@@ -150,6 +158,30 @@ export const IpcChannels = {
 		GetShare: "publishing:get-share",
 		DisableShare: "publishing:disable-share",
 		SyncShare: "publishing:sync-share",
+	},
+	Social: {
+		GetIdentity: "social:get-identity",
+		RegisterUsername: "social:register-username",
+		SendFriendRequest: "social:send-friend-request",
+		ListFriends: "social:list-friends",
+		ListFriendRequests: "social:list-friend-requests",
+		AcceptFriendRequest: "social:accept-friend-request",
+		RejectFriendRequest: "social:reject-friend-request",
+	},
+	Chat: {
+		ListThreads: "chat:list-threads",
+		OpenDmThread: "chat:open-dm-thread",
+		OpenProjectThread: "chat:open-project-thread",
+		FetchMessages: "chat:fetch-messages",
+		SendMessage: "chat:send-message",
+	},
+	Rooms: {
+		EnsureProjectRoom: "rooms:ensure-project-room",
+		InviteFriendToProjectRoom: "rooms:invite-friend-to-project-room",
+		ListRooms: "rooms:list-rooms",
+		ListInvites: "rooms:list-invites",
+		AcceptProjectInvite: "rooms:accept-project-invite",
+		FetchRoomEvents: "rooms:fetch-room-events",
 	},
 } as const;
 
@@ -311,6 +343,53 @@ export interface IpcInvokeHandlers {
 	) => ProjectShare | null;
 	[IpcChannels.Publishing.DisableShare]: (projectName: string) => void;
 	[IpcChannels.Publishing.SyncShare]: (projectName: string) => Promise<number>;
+
+	[IpcChannels.Social.GetIdentity]: () => SocialIdentity | null;
+	[IpcChannels.Social.RegisterUsername]: (
+		username: string,
+	) => Promise<SocialIdentity>;
+	[IpcChannels.Social.SendFriendRequest]: (toUsername: string) => Promise<{
+		requestId: string;
+		status: "pending" | "accepted";
+	}>;
+	[IpcChannels.Social.ListFriends]: () => Promise<Friend[]>;
+	[IpcChannels.Social.ListFriendRequests]: () => Promise<FriendRequest[]>;
+	[IpcChannels.Social.AcceptFriendRequest]: (
+		requestId: string,
+	) => Promise<void>;
+	[IpcChannels.Social.RejectFriendRequest]: (
+		requestId: string,
+	) => Promise<void>;
+
+	[IpcChannels.Chat.ListThreads]: () => Promise<ChatThread[]>;
+	[IpcChannels.Chat.OpenDmThread]: (friendUserId: string) => Promise<string>;
+	[IpcChannels.Chat.OpenProjectThread]: (roomId: string) => Promise<string>;
+	[IpcChannels.Chat.FetchMessages]: (
+		threadId: string,
+		since?: number,
+	) => Promise<ChatMessage[]>;
+	[IpcChannels.Chat.SendMessage]: (
+		threadId: string,
+		text: string,
+	) => Promise<void>;
+
+	[IpcChannels.Rooms.EnsureProjectRoom]: (
+		projectName: string,
+	) => Promise<string>;
+	[IpcChannels.Rooms.InviteFriendToProjectRoom]: (
+		projectName: string,
+		friendUserId: string,
+	) => Promise<void>;
+	[IpcChannels.Rooms.ListRooms]: () => Promise<Room[]>;
+	[IpcChannels.Rooms.ListInvites]: () => Promise<RoomInvite[]>;
+	[IpcChannels.Rooms.AcceptProjectInvite]: (
+		roomId: string,
+		projectName: string,
+	) => Promise<void>;
+	[IpcChannels.Rooms.FetchRoomEvents]: (
+		roomId: string,
+		since?: number,
+	) => Promise<RoomTimelineEvent[]>;
 }
 
 export interface ProjectProgressPreview {
