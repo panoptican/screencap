@@ -109,6 +109,7 @@ export interface AutomationRules {
 export interface OnboardingState {
 	version: number;
 	completedAt: number | null;
+	lastStep: string | null;
 }
 
 export interface ShortcutSettings {

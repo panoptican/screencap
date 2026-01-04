@@ -187,9 +187,7 @@ export function runMigrations(db: Database.Database): void {
 
 function tableExists(db: Database.Database, table: string): boolean {
 	const row = db
-		.prepare(
-			"SELECT name FROM sqlite_master WHERE type='table' AND name=?",
-		)
+		.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?")
 		.get(table) as { name: string } | undefined;
 	return row !== undefined;
 }
@@ -207,9 +205,7 @@ function migrateRoomTables(db: Database.Database): void {
 				last_synced_at INTEGER
 			)
 		`);
-		db.exec(
-			"CREATE INDEX idx_room_memberships_role ON room_memberships(role)",
-		);
+		db.exec("CREATE INDEX idx_room_memberships_role ON room_memberships(role)");
 		logger.info("Created room_memberships table");
 	}
 
@@ -230,7 +226,9 @@ function migrateRoomTables(db: Database.Database): void {
 		const columns = getExistingColumns(db, "room_events_cache");
 		if (columns.has("payload_ciphertext") || !columns.has("project")) {
 			db.exec("DROP TABLE room_events_cache");
-			logger.info("Dropped old room_events_cache table for full event schema migration");
+			logger.info(
+				"Dropped old room_events_cache table for full event schema migration",
+			);
 		}
 	}
 

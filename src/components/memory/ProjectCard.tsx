@@ -9,7 +9,6 @@ interface ProjectCardProps {
 	project: Memory;
 	stats?: ProjectStats;
 	isShared?: boolean;
-	sharedWith?: string;
 	onClick: () => void;
 }
 
@@ -17,7 +16,6 @@ export function ProjectCard({
 	project,
 	stats,
 	isShared = false,
-	sharedWith,
 	onClick,
 }: ProjectCardProps) {
 	const candidates = useMemo(

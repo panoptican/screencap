@@ -1,7 +1,7 @@
 import type { Event } from "../../../shared/types";
+import { getRoomIdForProject } from "../../infra/db/repositories/ProjectRoomLinkRepository";
 import type { CachedRoomEvent } from "../../infra/db/repositories/RoomEventsCacheRepository";
 import { listCachedRoomEventsByProject } from "../../infra/db/repositories/RoomEventsCacheRepository";
-import { getRoomIdForProject } from "../../infra/db/repositories/ProjectRoomLinkRepository";
 import { getIdentity } from "../social/IdentityService";
 
 function cachedEventToUnifiedEvent(cached: CachedRoomEvent): Event {

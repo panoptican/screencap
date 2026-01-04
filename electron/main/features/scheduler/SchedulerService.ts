@@ -172,7 +172,7 @@ async function runCaptureCycle(
 
 		const context =
 			reason === "manual"
-				? getLastKnownCandidate()?.context ?? null
+				? (getLastKnownCandidate()?.context ?? null)
 				: await collectActivityContext();
 
 		const isSelfCapture = context?.app.bundleId === SELF_APP_BUNDLE_ID;

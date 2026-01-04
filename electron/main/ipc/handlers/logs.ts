@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { release } from "node:os";
-import { app, clipboard, dialog, BrowserWindow } from "electron";
+import { join } from "node:path";
+import { app, BrowserWindow, clipboard, dialog } from "electron";
 import { z } from "zod";
 import { IpcChannels } from "../../../shared/ipc";
 import type { AppInfo, LogsCollectResult } from "../../../shared/types";
@@ -51,7 +51,8 @@ function buildLogsReport(rendererLogs?: string): LogsCollectResult {
 	sections.push(`Packaged: ${appInfo.isPackaged}`);
 	if (appInfo.buildDate) sections.push(`Build date: ${appInfo.buildDate}`);
 	if (appInfo.gitSha) sections.push(`Git SHA: ${appInfo.gitSha}`);
-	if (appInfo.releaseChannel) sections.push(`Channel: ${appInfo.releaseChannel}`);
+	if (appInfo.releaseChannel)
+		sections.push(`Channel: ${appInfo.releaseChannel}`);
 	sections.push(`Electron: ${appInfo.electron}`);
 	sections.push(`Chrome: ${appInfo.chrome}`);
 	sections.push(`Node: ${appInfo.node}`);

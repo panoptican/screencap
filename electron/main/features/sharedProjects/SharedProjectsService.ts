@@ -5,25 +5,23 @@ import {
 	getLatestCachedEventTimestamp,
 	listCachedRoomEvents,
 	listCachedRoomEventsByProject,
-	upsertCachedRoomEventsBatch,
 	updateCachedEventImagePath,
+	upsertCachedRoomEventsBatch,
 } from "../../infra/db/repositories/RoomEventsCacheRepository";
+import { upsertRoomMembersBatch } from "../../infra/db/repositories/RoomMembersCacheRepository";
 import {
-	type RoomMembership,
-	listRoomMemberships,
-	updateRoomMembershipLastSynced,
 	getRoomMembership,
+	listRoomMemberships,
+	type RoomMembership,
+	updateRoomMembershipLastSynced,
 } from "../../infra/db/repositories/RoomMembershipsRepository";
-import {
-	upsertRoomMembersBatch,
-} from "../../infra/db/repositories/RoomMembersCacheRepository";
 import { createLogger } from "../../infra/log";
 import { getSharedRoomImagesDir } from "../../infra/paths";
 import { decryptRoomImageBytes } from "../rooms/RoomCrypto";
 import { getRoomKey } from "../rooms/RoomsService";
+import { SOCIAL_API_BASE_URL } from "../social/config";
 import { getIdentity, signedFetch } from "../social/IdentityService";
 import { fetchRoomEvents } from "../sync/RoomSyncService";
-import { SOCIAL_API_BASE_URL } from "../social/config";
 
 const logger = createLogger({ scope: "SharedProjectsService" });
 
@@ -57,9 +55,7 @@ export type SharedEvent = {
 	originalPath: string | null;
 };
 
-function membershipToSharedProject(
-	membership: RoomMembership,
-): SharedProject {
+function membershipToSharedProject(membership: RoomMembership): SharedProject {
 	return {
 		roomId: membership.roomId,
 		projectName: membership.roomName,
@@ -141,13 +137,18 @@ export function getSharedProjectEventsByProjectName(params: {
 	return events.map(cachedEventToSharedEvent);
 }
 
-export async function syncRoom(roomId: string, backfill = false): Promise<{ count: number }> {
+export async function syncRoom(
+	roomId: string,
+	backfill = false,
+): Promise<{ count: number }> {
 	const identity = getIdentity();
 	if (!identity) {
 		throw new Error("Not authenticated");
 	}
 
-	const since = backfill ? undefined : (getLatestCachedEventTimestamp(roomId) ?? undefined);
+	const since = backfill
+		? undefined
+		: (getLatestCachedEventTimestamp(roomId) ?? undefined);
 	const events = await fetchRoomEvents({
 		roomId,
 		since,
@@ -213,7 +214,9 @@ export async function syncRoom(roomId: string, backfill = false): Promise<{ coun
 	return { count: events.length };
 }
 
-export async function syncRoomWithBackfill(roomId: string): Promise<{ count: number }> {
+export async function syncRoomWithBackfill(
+	roomId: string,
+): Promise<{ count: number }> {
 	return syncRoom(roomId, true);
 }
 
@@ -254,7 +257,10 @@ async function fetchRoomMembers(
 			role: string;
 		}>;
 	} catch (error) {
-		logger.warn("Error fetching room members", { roomId, error: String(error) });
+		logger.warn("Error fetching room members", {
+			roomId,
+			error: String(error),
+		});
 		return [];
 	}
 }

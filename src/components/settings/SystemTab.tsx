@@ -14,7 +14,6 @@ import {
 	Trash2,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { getRendererLogs, getRendererLogCount } from "@/lib/rendererLogBuffer";
 import {
 	SettingsRow,
 	SettingsRows,
@@ -24,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { TabsContent } from "@/components/ui/tabs";
 import { Panel } from "@/components/wrapped/Panel";
+import { getRendererLogCount, getRendererLogs } from "@/lib/rendererLogBuffer";
 import { cn } from "@/lib/utils";
 import type {
 	AppInfo,
@@ -381,6 +381,60 @@ export function SystemTab({
 									disabled={launchAtLoginDisabled}
 									onCheckedChange={(checked) =>
 										updateSetting("launchAtLogin", checked)
+									}
+								/>
+							}
+						/>
+					</SettingsRows>
+				</Panel>
+
+				<Panel
+					title="Friend Sharing Privacy"
+					meta="Control what info is shared with friends"
+					className="max-w-3xl"
+				>
+					<SettingsRows>
+						<SettingsRow
+							label="Include app name"
+							description="Share which app you're using (e.g. VS Code, Chrome)"
+							right={
+								<Switch
+									checked={settings.sharing?.includeAppName ?? true}
+									onCheckedChange={(checked) =>
+										updateSetting("sharing", {
+											...settings.sharing,
+											includeAppName: checked,
+										})
+									}
+								/>
+							}
+						/>
+						<SettingsRow
+							label="Include window title"
+							description="Share the window title (may contain file names, URLs)"
+							right={
+								<Switch
+									checked={settings.sharing?.includeWindowTitle ?? false}
+									onCheckedChange={(checked) =>
+										updateSetting("sharing", {
+											...settings.sharing,
+											includeWindowTitle: checked,
+										})
+									}
+								/>
+							}
+						/>
+						<SettingsRow
+							label="Include content info"
+							description="Share content context (e.g. Spotify track, video title)"
+							right={
+								<Switch
+									checked={settings.sharing?.includeContentInfo ?? true}
+									onCheckedChange={(checked) =>
+										updateSetting("sharing", {
+											...settings.sharing,
+											includeContentInfo: checked,
+										})
 									}
 								/>
 							}

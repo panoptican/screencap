@@ -89,9 +89,11 @@ export function ProjectsView() {
 		}
 		if (selectedProject) {
 			const normalizedName = normalizeProjectName(selectedProject.content);
-			return sharedProjects.find(
-				(sp) => normalizeProjectName(sp.projectName) === normalizedName,
-			) ?? null;
+			return (
+				sharedProjects.find(
+					(sp) => normalizeProjectName(sp.projectName) === normalizedName,
+				) ?? null
+			);
 		}
 		return null;
 	}, [selectedProjectId, sharedProjects, selectedProject]);

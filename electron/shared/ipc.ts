@@ -24,6 +24,7 @@ import type {
 	GetEventsOptions,
 	GetTimelineFacetsOptions,
 	GitCommit,
+	InviteStatus,
 	LLMTestResult,
 	LogsCollectResult,
 	Memory,
@@ -34,7 +35,6 @@ import type {
 	ProjectShare,
 	ProjectStatsItem,
 	RecordedApp,
-	InviteStatus,
 	Room,
 	RoomInvite,
 	RoomMember,
@@ -416,7 +416,9 @@ export interface IpcInvokeHandlers {
 		since?: number,
 	) => Promise<RoomTimelineEvent[]>;
 	[IpcChannels.Rooms.GetRoomMembers]: (roomId: string) => Promise<RoomMember[]>;
-	[IpcChannels.Rooms.ListSentInvites]: (roomId: string) => Promise<SentInvite[]>;
+	[IpcChannels.Rooms.ListSentInvites]: (
+		roomId: string,
+	) => Promise<SentInvite[]>;
 	[IpcChannels.Rooms.GetInviteStatus]: (
 		roomId: string,
 		friendUserId: string,
@@ -429,12 +431,16 @@ export interface IpcInvokeHandlers {
 		endDate?: number;
 		limit?: number;
 	}) => SharedEvent[];
-	[IpcChannels.SharedProjects.Sync]: (roomId: string) => Promise<{ count: number }>;
+	[IpcChannels.SharedProjects.Sync]: (
+		roomId: string,
+	) => Promise<{ count: number }>;
 	[IpcChannels.SharedProjects.SyncAll]: () => Promise<void>;
 
 	[IpcChannels.Logs.Collect]: (rendererLogs?: string) => LogsCollectResult;
 	[IpcChannels.Logs.CopyToClipboard]: (rendererLogs?: string) => void;
-	[IpcChannels.Logs.SaveToFile]: (rendererLogs?: string) => Promise<string | null>;
+	[IpcChannels.Logs.SaveToFile]: (
+		rendererLogs?: string,
+	) => Promise<string | null>;
 }
 
 export interface ProjectProgressPreview {

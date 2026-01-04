@@ -26,6 +26,7 @@ import type {
 	GetEventsOptions,
 	GetTimelineFacetsOptions,
 	GitCommit,
+	InviteStatus,
 	LLMTestResult,
 	LogsCollectResult,
 	Memory,
@@ -36,7 +37,6 @@ import type {
 	ProjectShare,
 	ProjectStatsItem,
 	RecordedApp,
-	InviteStatus,
 	Room,
 	RoomInvite,
 	RoomMember,
@@ -380,7 +380,11 @@ const api = {
 			roomId: string,
 			friendUserId: string,
 		): Promise<InviteStatus> =>
-			ipcRenderer.invoke(IpcChannels.Rooms.GetInviteStatus, roomId, friendUserId),
+			ipcRenderer.invoke(
+				IpcChannels.Rooms.GetInviteStatus,
+				roomId,
+				friendUserId,
+			),
 	},
 
 	sharedProjects: {

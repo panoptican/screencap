@@ -33,7 +33,12 @@ describe("RoomsService", () => {
 			);
 
 			vi.mocked(listRoomMembers).mockReturnValue([
-				{ roomId: "room-1", userId: "user-1", username: "john", role: "member" },
+				{
+					roomId: "room-1",
+					userId: "user-1",
+					username: "john",
+					role: "member",
+				},
 			]);
 			vi.mocked(hasPendingInvite).mockReturnValue(false);
 
@@ -86,7 +91,12 @@ describe("RoomsService", () => {
 			);
 
 			vi.mocked(listRoomMembers).mockReturnValue([
-				{ roomId: "room-1", userId: "user-1", username: "john", role: "member" },
+				{
+					roomId: "room-1",
+					userId: "user-1",
+					username: "john",
+					role: "member",
+				},
 			]);
 			vi.mocked(hasPendingInvite).mockReturnValue(true);
 

@@ -1,6 +1,5 @@
 import { BrowserWindow, screen } from "electron";
 import { IpcChannels } from "../../../shared/ipc";
-import { getLastKnownCandidate } from "../../features/activityWindow";
 import {
 	getCapturePopupWindow,
 	sendEventIdToPopup,
@@ -9,6 +8,7 @@ import {
 	showCapturePopupWindow,
 } from "../../app/capturePopup";
 import { getPopupWindow, setPopupHeight } from "../../app/popup";
+import { getLastKnownCandidate } from "../../features/activityWindow";
 import { captureInstant, processInstantCapture } from "../../features/capture";
 import { processCaptureGroup } from "../../features/events";
 import { checkScreenCapturePermission } from "../../features/permissions";

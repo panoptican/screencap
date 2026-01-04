@@ -14,7 +14,6 @@ import { normalizeProjectsInDb } from "../../features/projects";
 import { publishEvent } from "../../features/publishing/PublishingService";
 import { triggerQueueProcess } from "../../features/queue";
 import { publishProgressEventToRoom } from "../../features/sync/RoomSyncService";
-import { getRoomIdForProject } from "../../infra/db/repositories/ProjectRoomLinkRepository";
 import {
 	confirmAddiction,
 	deleteEvent,
@@ -47,6 +46,7 @@ import {
 	insertMemory,
 	updateMemory,
 } from "../../infra/db/repositories/MemoryRepository";
+import { getRoomIdForProject } from "../../infra/db/repositories/ProjectRoomLinkRepository";
 import {
 	addToQueue,
 	isEventQueued,
@@ -214,7 +214,8 @@ export function registerStorageHandlers(): void {
 
 			if (!event) return;
 
-			const isProgressEvent = event.projectProgress && event.projectProgress > 0;
+			const isProgressEvent =
+				event.projectProgress && event.projectProgress > 0;
 			if (!isProgressEvent) return;
 
 			const previousRoomId = previousProject

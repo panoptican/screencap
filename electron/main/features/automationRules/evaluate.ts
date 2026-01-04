@@ -9,7 +9,9 @@ import type {
 function hostImpliesPorn(urlHost: string | null | undefined): boolean {
 	const host = (urlHost ?? "").trim().toLowerCase();
 	if (!host) return false;
-	return host.includes("porn") || host.includes("nsfw") || host.includes("adult");
+	return (
+		host.includes("porn") || host.includes("nsfw") || host.includes("adult")
+	);
 }
 
 function mergeRule(base: PolicyResult, rule: AutomationRule): PolicyResult {

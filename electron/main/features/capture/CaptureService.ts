@@ -51,7 +51,9 @@ function bgraToRgba(bgra: Buffer, pixelCount: number): Buffer {
 	for (let i = 0; i < pixelCount; i++) {
 		const px = view[i];
 		result[i] =
-			(px & 0xff00ff00) | ((px >>> 16) & 0x000000ff) | ((px & 0x000000ff) << 16);
+			(px & 0xff00ff00) |
+			((px >>> 16) & 0x000000ff) |
+			((px & 0x000000ff) << 16);
 	}
 
 	return Buffer.from(result.buffer);
@@ -173,11 +175,19 @@ export async function processInstantCapture(
 		const highResPath = highResPathForId(source.id, originalsDir);
 
 		const [original, thumbnail] = await Promise.all([
-			createSharpFromRgba(source.rgba.buffer, source.rgba.width, source.rgba.height)
+			createSharpFromRgba(
+				source.rgba.buffer,
+				source.rgba.width,
+				source.rgba.height,
+			)
 				.resize(ORIGINAL_WIDTH, null, { withoutEnlargement: true })
 				.webp({ quality: WEBP_QUALITY })
 				.toBuffer(),
-			createSharpFromRgba(source.rgba.buffer, source.rgba.width, source.rgba.height)
+			createSharpFromRgba(
+				source.rgba.buffer,
+				source.rgba.width,
+				source.rgba.height,
+			)
 				.resize(THUMBNAIL_WIDTH, null, { withoutEnlargement: true })
 				.webp({ quality: WEBP_QUALITY })
 				.toBuffer(),
@@ -459,7 +469,11 @@ export async function captureForClassification(): Promise<Buffer | null> {
 
 	const rgba = nativeImageToRgba(nativeImage);
 
-	const resized = await createSharpFromRgba(rgba.buffer, rgba.width, rgba.height)
+	const resized = await createSharpFromRgba(
+		rgba.buffer,
+		rgba.width,
+		rgba.height,
+	)
 		.resize(ORIGINAL_WIDTH, null, { withoutEnlargement: true })
 		.webp({ quality: WEBP_QUALITY })
 		.toBuffer();

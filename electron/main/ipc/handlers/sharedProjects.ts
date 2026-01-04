@@ -21,13 +21,9 @@ const getEventsArgs = z.tuple([
 ]);
 
 export function registerSharedProjectsHandlers(): void {
-	secureHandle(
-		IpcChannels.SharedProjects.List,
-		noArgs,
-		(): SharedProject[] => {
-			return listSharedProjects();
-		},
-	);
+	secureHandle(IpcChannels.SharedProjects.List, noArgs, (): SharedProject[] => {
+		return listSharedProjects();
+	});
 
 	secureHandle(
 		IpcChannels.SharedProjects.GetEvents,

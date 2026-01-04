@@ -29,6 +29,10 @@ function mergeSettings(base: Settings, incoming: unknown): Settings {
 			incomingOnboarding?.completedAt === undefined
 				? base.onboarding.completedAt
 				: incomingOnboarding.completedAt,
+		lastStep:
+			incomingOnboarding?.lastStep === undefined
+				? base.onboarding.lastStep
+				: incomingOnboarding.lastStep,
 	};
 
 	const incomingShortcuts = partial.shortcuts;

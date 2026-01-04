@@ -6,9 +6,9 @@ import {
 	hasPendingInvite,
 	listSentInvitesForRoom,
 	markInviteAccepted,
+	type SentInvite,
 	updateSentInviteStatus,
 	upsertSentInvite,
-	type SentInvite,
 } from "../RoomInvitesSentRepository";
 
 vi.mock("../../connection", () => {

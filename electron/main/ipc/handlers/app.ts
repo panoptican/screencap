@@ -1,6 +1,6 @@
+import { execSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { rm } from "node:fs/promises";
-import { execSync } from "node:child_process";
 import { release } from "node:os";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import {
@@ -16,8 +16,8 @@ import { IpcChannels } from "../../../shared/ipc";
 import type { AppInfo } from "../../../shared/types";
 import { setIsQuitting } from "../../app/lifecycle";
 import { closeDatabase } from "../../infra/db";
-import { getScreenshotsDir } from "../../infra/paths";
 import { createLogger } from "../../infra/log";
+import { getScreenshotsDir } from "../../infra/paths";
 import { secureHandle } from "../secure";
 import {
 	ipcCopyImageArgs,

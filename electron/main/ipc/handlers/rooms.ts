@@ -11,14 +11,14 @@ import {
 	acceptRoomInvite,
 	ensureRoomForProject,
 	getInviteStatusForFriend,
+	type InviteStatus,
 	inviteFriendToProjectRoom,
 	listIncomingRoomInvites,
 	listRooms,
 	listSentInvites,
-	type InviteStatus,
 } from "../../features/rooms/RoomsService";
-import { listRoomMembers } from "../../infra/db/repositories/RoomMembersCacheRepository";
 import { fetchRoomEvents } from "../../features/sync/RoomSyncService";
+import { listRoomMembers } from "../../infra/db/repositories/RoomMembersCacheRepository";
 import { secureHandle } from "../secure";
 
 const noArgs = z.tuple([]);
@@ -64,7 +64,9 @@ export function registerRoomsHandlers(): void {
 			projectName: string;
 			friendUserId: string;
 			friendUsername?: string;
-		}): Promise<{ status: "invited" | "already_member" | "already_invited" }> => {
+		}): Promise<{
+			status: "invited" | "already_member" | "already_invited";
+		}> => {
 			return await inviteFriendToProjectRoom(params);
 		},
 	);

@@ -170,10 +170,19 @@ interface OnboardingWizardProps {
 	onComplete: () => void;
 }
 
+function resolveInitialStep(savedStep: string | null): OnboardingStep {
+	if (savedStep && STEPS.includes(savedStep as OnboardingStep)) {
+		return savedStep as OnboardingStep;
+	}
+	return "welcome";
+}
+
 export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
-	const [step, setStep] = useState<OnboardingStep>("welcome");
-	const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
 	const { settings, saveSettings } = useSettings();
+	const [step, setStep] = useState<OnboardingStep>(() =>
+		resolveInitialStep(settings.onboarding.lastStep),
+	);
+	const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
 	const status = useOnboardingStatus(1500);
 	const [pendingCompletionSettings, setPendingCompletionSettings] =
 		useState<Settings | null>(null);
@@ -185,21 +194,39 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
 		window.api?.app.getInfo().then(setAppInfo);
 	}, []);
 
+	const persistStep = useCallback(
+		(nextStep: OnboardingStep) => {
+			const nextSettings: Settings = {
+				...settings,
+				onboarding: {
+					...settings.onboarding,
+					lastStep: nextStep,
+				},
+			};
+			void saveSettings(nextSettings);
+		},
+		[settings, saveSettings],
+	);
+
 	const currentIndex = STEPS.indexOf(step);
 
 	const goNext = useCallback(() => {
 		const nextIndex = currentIndex + 1;
 		if (nextIndex < STEPS.length) {
-			setStep(STEPS[nextIndex]);
+			const nextStep = STEPS[nextIndex];
+			setStep(nextStep);
+			persistStep(nextStep);
 		}
-	}, [currentIndex]);
+	}, [currentIndex, persistStep]);
 
 	const goBack = useCallback(() => {
 		const prevIndex = currentIndex - 1;
 		if (prevIndex >= 0) {
-			setStep(STEPS[prevIndex]);
+			const prevStep = STEPS[prevIndex];
+			setStep(prevStep);
+			persistStep(prevStep);
 		}
-	}, [currentIndex]);
+	}, [currentIndex, persistStep]);
 
 	const handleComplete = useCallback(
 		async (baseSettings: Settings) => {
@@ -208,6 +235,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
 				onboarding: {
 					version: baseSettings.onboarding.version,
 					completedAt: Date.now(),
+					lastStep: null,
 				},
 			};
 			await saveSettings(nextSettings);

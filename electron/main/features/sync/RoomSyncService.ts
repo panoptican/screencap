@@ -242,11 +242,14 @@ function parsePayloadV1(payload: {
 		windowTitle: null,
 		contentKind: null,
 		contentTitle: null,
-		imageRef: typeof payload?.image?.ref === "string" ? payload.image.ref : null,
+		imageRef:
+			typeof payload?.image?.ref === "string" ? payload.image.ref : null,
 	};
 }
 
-function parsePayloadV2(payload: SharedEventPayload): Omit<DecryptedRoomEvent, "id" | "roomId" | "authorUserId" | "timestampMs"> {
+function parsePayloadV2(
+	payload: SharedEventPayload,
+): Omit<DecryptedRoomEvent, "id" | "roomId" | "authorUserId" | "timestampMs"> {
 	return {
 		endTimestampMs: payload.endTimestamp ?? null,
 		project: payload.project ?? null,
@@ -299,7 +302,9 @@ export async function fetchRoomEvents(params: {
 			roomKey,
 			payloadCiphertextB64: e.payloadCiphertext,
 		});
-		const payload = JSON.parse(payloadBytes.toString("utf8")) as SharedEventPayload & {
+		const payload = JSON.parse(
+			payloadBytes.toString("utf8"),
+		) as SharedEventPayload & {
 			v?: number;
 			caption?: string | null;
 			image?: { ref?: string | null };

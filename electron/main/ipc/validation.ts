@@ -237,6 +237,7 @@ const zOnboardingState = z
 	.object({
 		version: zNonNegativeInt,
 		completedAt: z.number().int().nullable(),
+		lastStep: zLimitedString(50).nullable(),
 	})
 	.strict();
 
@@ -247,6 +248,14 @@ const zShortcutSettings = z
 		captureNow: zShortcutAccelerator,
 		captureProjectProgress: zShortcutAccelerator,
 		endOfDay: zShortcutAccelerator,
+	})
+	.strict();
+
+const zSharingSettings = z
+	.object({
+		includeAppName: z.boolean(),
+		includeWindowTitle: z.boolean(),
+		includeContentInfo: z.boolean(),
 	})
 	.strict();
 
@@ -261,6 +270,7 @@ export const ipcSetSettingsArgs = z.tuple([
 			automationRules: zAutomationRules,
 			onboarding: zOnboardingState,
 			shortcuts: zShortcutSettings,
+			sharing: zSharingSettings,
 			llmEnabled: z.boolean(),
 			allowVisionUploads: z.boolean(),
 			cloudLlmModel: zLimitedString(500),

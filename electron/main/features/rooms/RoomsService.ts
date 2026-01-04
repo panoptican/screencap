@@ -3,28 +3,24 @@ import { safeStorage } from "electron";
 import type { RoomInvite } from "../../../shared/types";
 import { getDistinctProjects } from "../../infra/db/repositories/EventRepository";
 import { insertMemory } from "../../infra/db/repositories/MemoryRepository";
-import { projectKeyFromBase, normalizeProjectBase } from "../projects";
 import {
 	getRoomIdForProject,
 	upsertProjectRoomLink,
 } from "../../infra/db/repositories/ProjectRoomLinkRepository";
 import {
+	hasPendingInvite,
+	listSentInvitesForRoom,
+	type SentInvite,
+	upsertSentInvite,
+} from "../../infra/db/repositories/RoomInvitesSentRepository";
+import {
 	getRoomKeyCache,
 	upsertRoomKeyCache,
 } from "../../infra/db/repositories/RoomKeysCacheRepository";
-import {
-	upsertRoomMembership,
-} from "../../infra/db/repositories/RoomMembershipsRepository";
-import {
-	getSentInvite,
-	hasPendingInvite,
-	listSentInvitesForRoom,
-	markInviteAccepted,
-	upsertSentInvite,
-	type SentInvite,
-} from "../../infra/db/repositories/RoomInvitesSentRepository";
 import { listRoomMembers } from "../../infra/db/repositories/RoomMembersCacheRepository";
+import { upsertRoomMembership } from "../../infra/db/repositories/RoomMembershipsRepository";
 import { createLogger } from "../../infra/log";
+import { normalizeProjectBase, projectKeyFromBase } from "../projects";
 import {
 	getDhPrivateKeyPkcs8DerB64,
 	getIdentity,
@@ -393,7 +389,9 @@ export async function acceptRoomInvite(params: {
 
 async function triggerBackfillSync(roomId: string): Promise<void> {
 	try {
-		const { syncRoomWithBackfill } = await import("../sharedProjects/SharedProjectsService");
+		const { syncRoomWithBackfill } = await import(
+			"../sharedProjects/SharedProjectsService"
+		);
 		await syncRoomWithBackfill(roomId);
 		logger.info("Backfill sync completed for room", { roomId });
 	} catch (error) {

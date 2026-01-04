@@ -2,7 +2,6 @@ import { app, globalShortcut, type Rectangle, screen } from "electron";
 import { getLogicalDayStart } from "../../../shared/dayBoundary";
 import { IpcEvents } from "../../../shared/ipc";
 import type { Settings, ShortcutSettings } from "../../../shared/types";
-import { getLastKnownCandidate } from "../activityWindow";
 import {
 	getCapturePopupWindow,
 	sendEventIdToPopup,
@@ -13,6 +12,7 @@ import { getPopupWindow } from "../../app/popup";
 import { getMainWindow, showMainWindow } from "../../app/window";
 import { createLogger } from "../../infra/log";
 import { broadcast } from "../../infra/windows";
+import { getLastKnownCandidate } from "../activityWindow";
 import { captureInstant, processInstantCapture } from "../capture";
 import { processCaptureGroup } from "../events";
 import { checkScreenCapturePermission } from "../permissions";

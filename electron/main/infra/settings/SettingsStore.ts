@@ -16,7 +16,11 @@ const DEFAULT_SETTINGS: Settings = {
 	excludedApps: [],
 	launchAtLogin: false,
 	automationRules: { apps: {}, hosts: {} },
-	onboarding: { version: ONBOARDING_VERSION, completedAt: null },
+	onboarding: {
+		version: ONBOARDING_VERSION,
+		completedAt: null,
+		lastStep: null,
+	},
 	shortcuts: {
 		captureNow: "Command+Shift+O",
 		captureProjectProgress: "Command+Shift+P",
@@ -66,6 +70,7 @@ const zOnboardingState = z
 	.object({
 		version: zNonNegativeInt.catch(ONBOARDING_VERSION),
 		completedAt: z.number().int().nullable().catch(null),
+		lastStep: zLimitedString(50).nullable().catch(null),
 	})
 	.strip()
 	.catch(DEFAULT_SETTINGS.onboarding);
@@ -88,8 +93,12 @@ const zShortcutSettings = z
 const zSharingSettings = z
 	.object({
 		includeAppName: z.boolean().catch(DEFAULT_SETTINGS.sharing.includeAppName),
-		includeWindowTitle: z.boolean().catch(DEFAULT_SETTINGS.sharing.includeWindowTitle),
-		includeContentInfo: z.boolean().catch(DEFAULT_SETTINGS.sharing.includeContentInfo),
+		includeWindowTitle: z
+			.boolean()
+			.catch(DEFAULT_SETTINGS.sharing.includeWindowTitle),
+		includeContentInfo: z
+			.boolean()
+			.catch(DEFAULT_SETTINGS.sharing.includeContentInfo),
 	})
 	.strip()
 	.catch(DEFAULT_SETTINGS.sharing);

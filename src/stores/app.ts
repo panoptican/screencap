@@ -228,11 +228,16 @@ export const useAppStore = create<AppState>((set, _get) => ({
 		excludedApps: [],
 		launchAtLogin: false,
 		automationRules: { apps: {}, hosts: {} },
-		onboarding: { version: 1, completedAt: null },
+		onboarding: { version: 1, completedAt: null, lastStep: null },
 		shortcuts: {
 			captureNow: "Command+Shift+O",
 			captureProjectProgress: "Command+Shift+P",
 			endOfDay: "Command+Shift+E",
+		},
+		sharing: {
+			includeAppName: true,
+			includeWindowTitle: false,
+			includeContentInfo: true,
 		},
 		llmEnabled: true,
 		allowVisionUploads: true,

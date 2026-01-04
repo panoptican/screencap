@@ -746,7 +746,9 @@ export function ProjectDetailView({
 						</div>
 					) : capture.kind === "error" ? (
 						<div className="rounded-xl border border-border bg-muted/30 p-6">
-							<div className="text-sm text-foreground/90">{capture.message}</div>
+							<div className="text-sm text-foreground/90">
+								{capture.message}
+							</div>
 							<div className="mt-4 flex justify-end gap-2">
 								<Button variant="outline" onClick={() => void closeCapture()}>
 									Close
@@ -798,7 +800,8 @@ export function ProjectDetailView({
 									className="min-h-[120px] resize-none"
 									disabled={capture.kind === "saving"}
 									onKeyDown={(e) => {
-										const isSend = (e.metaKey || e.ctrlKey) && e.key === "Enter";
+										const isSend =
+											(e.metaKey || e.ctrlKey) && e.key === "Enter";
 										if (!isSend) return;
 										e.preventDefault();
 										void submitCapture();
@@ -1329,7 +1332,11 @@ export function ProjectDetailView({
 												)}
 
 												<div className="flex gap-2">
-													<Button variant="outline" size="sm" onClick={syncShare}>
+													<Button
+														variant="outline"
+														size="sm"
+														onClick={syncShare}
+													>
 														<RefreshCw className="h-4 w-4 mr-1.5" />
 														Sync
 													</Button>
@@ -1404,7 +1411,10 @@ export function ProjectDetailView({
 																			</span>
 																		)}
 																	</div>
-																	<Badge variant="secondary" className="text-xs">
+																	<Badge
+																		variant="secondary"
+																		className="text-xs"
+																	>
 																		{m.role}
 																	</Badge>
 																</div>
@@ -1425,7 +1435,9 @@ export function ProjectDetailView({
 														<div className="space-y-2">
 															{roomState.friends.map((f) => {
 																const isMember = memberIds.has(f.userId);
-																const isPending = pendingInviteIds.has(f.userId);
+																const isPending = pendingInviteIds.has(
+																	f.userId,
+																);
 																return (
 																	<div
 																		key={f.userId}

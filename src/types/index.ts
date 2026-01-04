@@ -124,6 +124,7 @@ export interface AutomationRules {
 export interface OnboardingState {
 	version: number;
 	completedAt: number | null;
+	lastStep: string | null;
 }
 
 export interface ShortcutSettings {
@@ -648,7 +649,7 @@ declare global {
 				}) => Promise<void>;
 				unmarkProjectProgress: (id: string) => Promise<void>;
 				deleteEvent: (id: string) => Promise<void>;
-			finalizeOnboardingEvent: (id: string) => Promise<void>;
+				finalizeOnboardingEvent: (id: string) => Promise<void>;
 				getMemories: (type?: string) => Promise<Memory[]>;
 				insertMemory: (memory: Memory) => Promise<void>;
 				updateMemory: (
@@ -766,7 +767,9 @@ declare global {
 					projectName: string;
 					friendUserId: string;
 					friendUsername?: string;
-				}) => Promise<{ status: "invited" | "already_member" | "already_invited" }>;
+				}) => Promise<{
+					status: "invited" | "already_member" | "already_invited";
+				}>;
 				listRooms: () => Promise<Room[]>;
 				listInvites: () => Promise<RoomInvite[]>;
 				acceptProjectInvite: (params: AcceptRoomInviteParams) => Promise<void>;
