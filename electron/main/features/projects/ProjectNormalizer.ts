@@ -61,6 +61,12 @@ function baseTokens(raw: string): string[] {
 		tokens.pop();
 	}
 
+	while (tokens.length > 1) {
+		const last = tokens[tokens.length - 1];
+		if (!/^[-–—]+$/.test(last)) break;
+		tokens.pop();
+	}
+
 	return tokens;
 }
 
