@@ -26,6 +26,8 @@ const VALID_SETTINGS: Settings = {
 	localLlmEnabled: false,
 	localLlmBaseUrl: "http://localhost:11434/v1",
 	localLlmModel: "llama3.2",
+	autoDetectProgress: true,
+	showDominantWebsites: false,
 };
 
 describe("ipcSetSettingsArgs", () => {

@@ -476,8 +476,10 @@ export function EndOfDayFlow() {
 
 	const slots = useMemo(() => {
 		if (!dayStartMs) return [];
-		return computeDaylineSlots(events, dayStartMs);
-	}, [dayStartMs, events]);
+		return computeDaylineSlots(events, dayStartMs, {
+			showDominantWebsites: settings.showDominantWebsites,
+		});
+	}, [dayStartMs, events, settings.showDominantWebsites]);
 
 	const activeMinutes = useMemo(() => {
 		const active = slots.filter((s) => s.count > 0).length;

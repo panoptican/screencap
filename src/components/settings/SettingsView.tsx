@@ -31,6 +31,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Panel } from "@/components/wrapped/Panel";
 import { useSettings } from "@/hooks/useSettings";
@@ -430,6 +431,27 @@ export function SettingsView() {
 									void updateSetting("shortcuts", next);
 								}}
 							/>
+
+							<Panel
+								title="Day Wrapped"
+								meta="Visualization preferences"
+								className="max-w-3xl"
+							>
+								<SettingsRows>
+									<SettingsRow
+										title="Show websites instead of browsers"
+										description="When enabled, shows the dominant website (e.g. github.com) instead of the browser app (e.g. Safari) in apps view"
+										right={
+											<Switch
+												checked={settings.showDominantWebsites}
+												onCheckedChange={(checked) =>
+													updateSetting("showDominantWebsites", checked)
+												}
+											/>
+										}
+									/>
+								</SettingsRows>
+							</Panel>
 						</div>
 					</TabsContent>
 

@@ -15,6 +15,7 @@ import {
 	Maximize2,
 	MonitorPlay,
 	Music,
+	Rocket,
 	Settings2,
 	Tag,
 	Trash2,
@@ -22,6 +23,7 @@ import {
 	X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { AuthorAvatar } from "@/components/progress/AuthorAvatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -57,7 +59,13 @@ import { copyBestImage } from "@/lib/copyImage";
 import { isNsfwEvent } from "@/lib/nsfw";
 import { cn, formatDate, formatTime, getCategoryColor } from "@/lib/utils";
 import { useAppStore } from "@/stores/app";
-import type { AutomationRule, Event, EventScreenshot, Settings } from "@/types";
+import type {
+	AutomationRule,
+	Event,
+	EventScreenshot,
+	Settings,
+	SocialIdentity,
+} from "@/types";
 import { parseBackgroundFromEvent } from "@/types";
 
 const CATEGORIES = ["Study", "Work", "Leisure", "Chores", "Social", "Unknown"];
@@ -135,6 +143,7 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 		Settings["automationRules"] | null
 	>(null);
 	const [projects, setProjects] = useState<string[]>([]);
+	const [identity, setIdentity] = useState<SocialIdentity | null>(null);
 	const removeEvent = useAppStore((s) => s.removeEvent);
 	const updateEvent = useAppStore((s) => s.updateEvent);
 
@@ -181,6 +190,13 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 		event.projectProgressConfidence != null
 			? Math.round(event.projectProgressConfidence * 100)
 			: null;
+
+	const isSharedFromOther =
+		event.isRemote &&
+		event.authorUserId &&
+		event.authorUsername &&
+		identity &&
+		event.authorUserId !== identity.userId;
 
 	useEffect(() => {
 		setPreviewPath(previewHighResPath ?? previewBasePath ?? null);
@@ -251,6 +267,11 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 	}, [open]);
 
 	useEffect(() => {
+		if (!window.api?.social) return;
+		void window.api.social.getIdentity().then(setIdentity);
+	}, []);
+
+	useEffect(() => {
 		if (!open || screenshots.length < 2) return;
 
 		const handler = (e: KeyboardEvent) => {
@@ -309,6 +330,23 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 		await window.api.storage.deleteEvent(event.id);
 		removeEvent(event.id);
 		onOpenChange(false);
+	};
+
+	const handleMarkProgress = async () => {
+		await window.api.storage.markProjectProgress(event.id);
+		updateEvent(event.id, {
+			projectProgress: 1,
+			projectProgressEvidence: "manual",
+		});
+	};
+
+	const handleUnmarkProgress = async () => {
+		await window.api.storage.unmarkProjectProgress(event.id);
+		updateEvent(event.id, {
+			projectProgress: 0,
+			projectProgressEvidence: null,
+			projectProgressConfidence: null,
+		});
 	};
 
 	const updateAutomationRule = useCallback(
@@ -542,6 +580,18 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 							</div>
 						)}
 
+						{isSharedFromOther && (
+							<div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
+								<AuthorAvatar username={event.authorUsername!} />
+								<span className="text-sm text-muted-foreground">
+									Shared by{" "}
+									<span className="font-medium text-foreground">
+										@{event.authorUsername}
+									</span>
+								</span>
+							</div>
+						)}
+
 						<div className="grid grid-cols-2 gap-4 text-sm">
 							<div>
 								<span className="text-muted-foreground">Date:</span>
@@ -766,11 +816,21 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 									<span className="text-sm text-primary font-medium">
 										Project progress
 									</span>
-									<span className="text-xs text-muted-foreground">
-										{progressConfidence != null
-											? `${progressConfidence}%`
-											: "—"}
-									</span>
+									<div className="flex items-center gap-2">
+										<span className="text-xs text-muted-foreground">
+											{progressConfidence != null
+												? `${progressConfidence}%`
+												: "—"}
+										</span>
+										<Button
+											size="sm"
+											variant="outline"
+											className="h-7 text-xs border-primary/30 text-primary hover:bg-primary/10"
+											onClick={handleUnmarkProgress}
+										>
+											Unmark
+										</Button>
+									</div>
 								</div>
 								<div className="flex flex-wrap items-center gap-2">
 									{event.project && (
@@ -895,6 +955,16 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 								<Trash2 className="h-4 w-4" />
 								Dismiss
 							</Button>
+							{event.projectProgress !== 1 && (
+								<Button
+									variant="outline"
+									size="sm"
+									onClick={handleMarkProgress}
+								>
+									<Rocket className="h-4 w-4" />
+									Mark as progress
+								</Button>
+							)}
 							{hasAutomationOptions && (
 								<DropdownMenu>
 									<DropdownMenuTrigger asChild>

@@ -1,6 +1,28 @@
 import { DOT_ALPHA_BY_LEVEL, type Rgb, rgba } from "@/lib/color";
 import type { Event } from "@/types";
 
+const BROWSER_APP_NAMES = new Set([
+	"Safari",
+	"Google Chrome",
+	"Firefox",
+	"Arc",
+	"Brave Browser",
+	"Microsoft Edge",
+	"Opera",
+	"Vivaldi",
+	"Chromium",
+	"Orion",
+	"Zen Browser",
+	"Waterfox",
+	"DuckDuckGo",
+	"Tor Browser",
+	"Dia",
+]);
+
+function isBrowserApp(appName: string): boolean {
+	return BROWSER_APP_NAMES.has(appName);
+}
+
 export type ActivityCategory =
 	| "Study"
 	| "Work"
@@ -14,6 +36,7 @@ export type DaylineSlot = {
 	count: number;
 	category: ActivityCategory;
 	addiction: string | null;
+	appName: string | null;
 };
 
 export const SLOT_MINUTES = 10;
@@ -74,16 +97,24 @@ export function slotLevel(count: number): 0 | 1 | 2 | 3 | 4 {
 	return 4;
 }
 
+export interface DaylineOptions {
+	showDominantWebsites?: boolean;
+}
+
 export function computeDaylineSlots(
 	events: Event[],
 	dayStartMs: number,
+	options: DaylineOptions = {},
 ): DaylineSlot[] {
+	const { showDominantWebsites = false } = options;
 	const slotMs = SLOT_MINUTES * 60 * 1000;
 	const slots = Array.from({ length: SLOTS_PER_DAY }, (_, i) => ({
 		startMs: dayStartMs + i * slotMs,
 		count: 0,
 		categoryCounts: new Map<ActivityCategory, number>(),
 		addictionCounts: new Map<string, number>(),
+		appCounts: new Map<string, number>(),
+		websiteCounts: new Map<string, number>(),
 	}));
 
 	for (const e of events) {
@@ -100,14 +131,56 @@ export function computeDaylineSlots(
 				(slot.addictionCounts.get(addiction) ?? 0) + 1,
 			);
 		}
+		if (e.appName) {
+			slot.appCounts.set(e.appName, (slot.appCounts.get(e.appName) ?? 0) + 1);
+		}
+		if (e.urlHost) {
+			const host = e.urlHost.replace(/^www\./, "");
+			slot.websiteCounts.set(host, (slot.websiteCounts.get(host) ?? 0) + 1);
+		}
 	}
 
-	return slots.map(({ startMs, count, categoryCounts, addictionCounts }) => ({
-		startMs,
-		count,
-		category: dominantCategory(categoryCounts),
-		addiction: dominantMapKey(addictionCounts),
-	}));
+	return slots.map(
+		({
+			startMs,
+			count,
+			categoryCounts,
+			addictionCounts,
+			appCounts,
+			websiteCounts,
+		}) => {
+			const dominantApp = dominantMapKey(appCounts);
+			const dominantWebsite = dominantMapKey(websiteCounts);
+
+			let appName = dominantApp;
+			if (
+				showDominantWebsites &&
+				dominantApp &&
+				isBrowserApp(dominantApp) &&
+				dominantWebsite
+			) {
+				const totalWebsiteEvents = Array.from(websiteCounts.values()).reduce(
+					(a, b) => a + b,
+					0,
+				);
+				const dominantWebsiteCount = websiteCounts.get(dominantWebsite) ?? 0;
+				if (
+					totalWebsiteEvents > 0 &&
+					dominantWebsiteCount / totalWebsiteEvents > 0.5
+				) {
+					appName = dominantWebsite;
+				}
+			}
+
+			return {
+				startMs,
+				count,
+				category: dominantCategory(categoryCounts),
+				addiction: dominantMapKey(addictionCounts),
+				appName,
+			};
+		},
+	);
 }
 
 export function countCoveredSlots(events: Event[], dayStartMs: number): number {

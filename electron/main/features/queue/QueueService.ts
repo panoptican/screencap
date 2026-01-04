@@ -293,14 +293,23 @@ async function processQueueItem(item: {
 				const subcategoriesJson = cached.subcategories ?? JSON.stringify([]);
 
 				let project = forcedProject ?? cached.project;
+				const autoDetectProgress = settings.autoDetectProgress ?? false;
+				const cachedWasAutoDetected =
+					cached.projectProgress === 1 &&
+					cached.projectProgressEvidence === "llm";
+				const shouldInheritCachedProgress =
+					cached.projectProgress === 1 &&
+					(autoDetectProgress || !cachedWasAutoDetected);
 				let resolvedProgress = isManualProgress
 					? 1
-					: cached.projectProgress === 1
+					: shouldInheritCachedProgress
 						? 1
 						: 0;
 				let resolvedEvidence: string | null = isManualProgress
 					? "manual"
-					: (cached.projectProgressEvidence ?? null);
+					: shouldInheritCachedProgress
+						? (cached.projectProgressEvidence ?? null)
+						: null;
 
 				const resolvedCaption = hasManualCaption
 					? (latest?.caption ?? null)
@@ -462,7 +471,9 @@ async function processQueueItem(item: {
 			}
 
 			let project = forcedProject ?? canonicalizeProject(result.project);
-			let progressShown = !!project && result.project_progress.shown;
+			const autoDetectProgress = settings.autoDetectProgress ?? false;
+			let progressShown =
+				autoDetectProgress && !!project && result.project_progress.shown;
 			let resolvedProgress = isManualProgress ? 1 : progressShown ? 1 : 0;
 			let resolvedEvidence: string | null = isManualProgress
 				? "manual"

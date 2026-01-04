@@ -118,6 +118,19 @@ export function AiSettingsTab({
 								/>
 							}
 						/>
+						<SettingsRow
+							title="Auto-detect project progress"
+							description="When enabled, AI will automatically mark screenshots as project progress. Otherwise, use 'Capture as progress' shortcut or mark manually."
+							right={
+								<Switch
+									checked={settings.autoDetectProgress}
+									disabled={!settings.llmEnabled}
+									onCheckedChange={(checked) =>
+										updateSetting("autoDetectProgress", checked)
+									}
+								/>
+							}
+						/>
 					</SettingsRows>
 				</Panel>
 

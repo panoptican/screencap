@@ -155,6 +155,8 @@ export interface Settings {
 	localLlmEnabled: boolean;
 	localLlmBaseUrl: string;
 	localLlmModel: string;
+	autoDetectProgress: boolean;
+	showDominantWebsites: boolean;
 }
 
 export interface ProjectRepo {
@@ -647,6 +649,7 @@ declare global {
 					caption: string;
 					project: string | null;
 				}) => Promise<void>;
+				markProjectProgress: (id: string) => Promise<void>;
 				unmarkProjectProgress: (id: string) => Promise<void>;
 				deleteEvent: (id: string) => Promise<void>;
 				finalizeOnboardingEvent: (id: string) => Promise<void>;

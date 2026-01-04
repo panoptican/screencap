@@ -19,6 +19,7 @@ import {
 import { useAppStore } from "@/stores/app";
 import type { Event } from "@/types";
 import {
+	type DaylineViewMode,
 	StoryViewHeader,
 	StoryViewMain,
 	StoryViewSidebar,
@@ -64,6 +65,7 @@ export function StoryView() {
 	const [addAddictionDialogOpen, setAddAddictionDialogOpen] = useState(false);
 	const [episodesPage, setEpisodesPage] = useState(0);
 	const [progressProject, setProgressProject] = useState<string>(PROGRESS_ALL);
+	const [daylineMode, setDaylineMode] = useState<DaylineViewMode>("categories");
 
 	const showJournal = scope !== "addiction";
 	const showAddiction = scope !== "journal";
@@ -183,13 +185,19 @@ export function StoryView() {
 		isGenerating || !settings.apiKey || llmEvents.length === 0;
 
 	const slots = useMemo(
-		() => computeDaylineSlots(dayEvents, selectedStartMs),
-		[dayEvents, selectedStartMs],
+		() =>
+			computeDaylineSlots(dayEvents, selectedStartMs, {
+				showDominantWebsites: settings.showDominantWebsites,
+			}),
+		[dayEvents, selectedStartMs, settings.showDominantWebsites],
 	);
 
 	const prevSlots = useMemo(
-		() => computeDaylineSlots(prevDayEvents, prevStartMs),
-		[prevDayEvents, prevStartMs],
+		() =>
+			computeDaylineSlots(prevDayEvents, prevStartMs, {
+				showDominantWebsites: settings.showDominantWebsites,
+			}),
+		[prevDayEvents, prevStartMs, settings.showDominantWebsites],
 	);
 
 	const activeSlots = useMemo(() => slots.map((s) => s.count > 0), [slots]);
@@ -613,6 +621,8 @@ export function StoryView() {
 						titleDate={titleDate}
 						titleYear={titleYear}
 						slots={slots}
+						daylineMode={daylineMode}
+						onDaylineModeChange={setDaylineMode}
 						dayStats={dayStats}
 						dayEvents={dayEvents}
 						prevDayEvents={prevDayEvents}

@@ -140,6 +140,8 @@ export interface Settings {
 	localLlmEnabled: boolean;
 	localLlmBaseUrl: string;
 	localLlmModel: string;
+	autoDetectProgress: boolean;
+	showDominantWebsites: boolean;
 }
 
 export interface ProjectRepo {

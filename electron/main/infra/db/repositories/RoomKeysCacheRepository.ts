@@ -37,3 +37,20 @@ export function upsertRoomKeyCache(params: RoomKeyCacheRow): void {
   `,
 	).run(params.roomId, params.roomKeyEnc, params.updatedAt);
 }
+
+export function listRoomKeysCache(): RoomKeyCacheRow[] {
+	if (!isDbOpen()) return [];
+	const db = getDatabase();
+	const rows = db
+		.prepare("SELECT room_id, room_key_enc, updated_at FROM room_keys_cache")
+		.all() as Array<{
+		room_id: string;
+		room_key_enc: string;
+		updated_at: number;
+	}>;
+	return rows.map((row) => ({
+		roomId: row.room_id,
+		roomKeyEnc: row.room_key_enc,
+		updatedAt: row.updated_at,
+	}));
+}

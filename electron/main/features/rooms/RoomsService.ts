@@ -16,6 +16,7 @@ import {
 } from "../../infra/db/repositories/RoomInvitesSentRepository";
 import {
 	getRoomKeyCache,
+	listRoomKeysCache,
 	upsertRoomKeyCache,
 } from "../../infra/db/repositories/RoomKeysCacheRepository";
 import {
@@ -27,6 +28,7 @@ import { createLogger } from "../../infra/log";
 import { normalizeProjectBase, projectKeyFromBase } from "../projects";
 import {
 	getDhPrivateKeyPkcs8DerB64,
+	getDhPublicKeySpkiDerB64,
 	getIdentity,
 	signedFetch,
 } from "../social/IdentityService";
@@ -141,6 +143,23 @@ export async function ensureRoomForProject(params: {
 	const roomKeyEnc = encodeSecretJson(encryptSecret(roomKeyB64));
 	upsertRoomKeyCache({ roomId, roomKeyEnc, updatedAt: now });
 
+	const ownerEnvelope = createRoomKeyEnvelope({
+		roomKey,
+		recipientDhPubKeySpkiDerB64: getDhPublicKeySpkiDerB64(),
+	});
+	await signedFetch(`/api/rooms/${roomId}/keys`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({
+			envelopes: [
+				{
+					deviceId: identity.deviceId,
+					envelopeJson: JSON.stringify(ownerEnvelope),
+				},
+			],
+		}),
+	});
+
 	logger.info("Created room for project", {
 		projectName: params.projectName,
 		roomId,
@@ -150,12 +169,15 @@ export async function ensureRoomForProject(params: {
 
 export async function getRoomKey(roomId: string): Promise<Buffer> {
 	const cached = getRoomKeyCache(roomId);
-	if (cached) {
+	const cachedRoomKey = (() => {
+		if (!cached) return null;
 		const secret = decodeSecretJson(cached.roomKeyEnc);
 		const decrypted = secret ? decryptSecret(secret) : null;
-		if (decrypted) {
-			return decodeRoomKeyB64(decrypted);
-		}
+		return decrypted ? decodeRoomKeyB64(decrypted) : null;
+	})();
+
+	if (cachedRoomKey) {
+		return cachedRoomKey;
 	}
 
 	const res = await signedFetch(`/api/rooms/${roomId}/keys`, { method: "GET" });
@@ -174,6 +196,69 @@ export async function getRoomKey(roomId: string): Promise<Buffer> {
 	upsertRoomKeyCache({ roomId, roomKeyEnc, updatedAt: Date.now() });
 
 	return roomKey;
+}
+
+export async function uploadOwnKeyEnvelopeIfMissing(
+	roomId: string,
+): Promise<boolean> {
+	const identity = getIdentity();
+	if (!identity) return false;
+
+	const cached = getRoomKeyCache(roomId);
+	if (!cached) return false;
+
+	const secret = decodeSecretJson(cached.roomKeyEnc);
+	const decrypted = secret ? decryptSecret(secret) : null;
+	if (!decrypted) return false;
+
+	const roomKey = decodeRoomKeyB64(decrypted);
+	const envelope = createRoomKeyEnvelope({
+		roomKey,
+		recipientDhPubKeySpkiDerB64: getDhPublicKeySpkiDerB64(),
+	});
+
+	const res = await signedFetch(`/api/rooms/${roomId}/keys`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({
+			envelopes: [
+				{ deviceId: identity.deviceId, envelopeJson: JSON.stringify(envelope) },
+			],
+		}),
+	});
+
+	if (!res.ok) {
+		logger.warn("Failed to upload own key envelope", {
+			roomId,
+			status: res.status,
+		});
+		return false;
+	}
+
+	logger.info("Uploaded own key envelope for room", { roomId });
+	return true;
+}
+
+export async function repairAllRoomKeyEnvelopes(): Promise<void> {
+	const identity = getIdentity();
+	if (!identity) return;
+
+	const cachedKeys = listRoomKeysCache();
+	let repaired = 0;
+
+	for (const cached of cachedKeys) {
+		try {
+			const uploaded = await uploadOwnKeyEnvelopeIfMissing(cached.roomId);
+			if (uploaded) repaired++;
+		} catch {}
+	}
+
+	if (repaired > 0) {
+		logger.info("Repaired room key envelopes", {
+			repaired,
+			total: cachedKeys.length,
+		});
+	}
 }
 
 export type InviteStatus = "pending" | "member" | "none";

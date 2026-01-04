@@ -1,6 +1,6 @@
 import { format } from "date-fns";
 import { useMemo } from "react";
-import { DOT_ALPHA_BY_LEVEL, rgba } from "@/lib/color";
+import { appNameToRgb, DOT_ALPHA_BY_LEVEL, rgba } from "@/lib/color";
 import {
 	CATEGORY_RGB,
 	type DaylineSlot,
@@ -8,7 +8,7 @@ import {
 	slotLevel,
 } from "@/lib/dayline";
 
-export type DaylineViewMode = "addiction" | "categories";
+export type DaylineViewMode = "categories" | "addiction" | "apps";
 
 function slotBg(
 	slot: DaylineSlot,
@@ -18,6 +18,10 @@ function slotBg(
 	if (slot.count <= 0) return null;
 	const alpha = DOT_ALPHA_BY_LEVEL[level];
 	if (mode === "categories") return rgba(CATEGORY_RGB[slot.category], alpha);
+	if (mode === "apps") {
+		if (!slot.appName) return rgba(CATEGORY_RGB.Unknown, alpha);
+		return rgba(appNameToRgb(slot.appName), alpha);
+	}
 	if (slot.addiction) return `hsl(var(--destructive) / ${alpha})`;
 	return rgba(CATEGORY_RGB.Work, alpha);
 }
@@ -27,6 +31,8 @@ function slotTitle(slot: DaylineSlot, mode: DaylineViewMode): string {
 	if (slot.count <= 0) return `${time} · 0`;
 	if (mode === "categories")
 		return `${time} · ${slot.count} · ${slot.category}`;
+	if (mode === "apps")
+		return `${time} · ${slot.count} · ${slot.appName ?? "Unknown"}`;
 	if (slot.addiction)
 		return `${time} · ${slot.count} · Addiction: ${slot.addiction}`;
 	return `${time} · ${slot.count} · Non-addiction`;
@@ -90,31 +96,53 @@ export function DaylineLegend({
 	slots: DaylineSlot[];
 	mode: DaylineViewMode;
 }) {
-	const present = useMemo(() => {
-		const s = new Set<string>();
+	const alpha = DOT_ALPHA_BY_LEVEL[4];
+
+	const legend = useMemo(() => {
+		if (mode === "categories") {
+			const present = new Set<string>();
+			for (const slot of slots) {
+				if (slot.count > 0) present.add(slot.category);
+			}
+			const items = [
+				{ label: "Study", color: rgba(CATEGORY_RGB.Study, alpha) },
+				{ label: "Work", color: rgba(CATEGORY_RGB.Work, alpha) },
+				{ label: "Leisure", color: rgba(CATEGORY_RGB.Leisure, alpha) },
+				{ label: "Chores", color: rgba(CATEGORY_RGB.Chores, alpha) },
+				{ label: "Social", color: rgba(CATEGORY_RGB.Social, alpha) },
+				{ label: "Unknown", color: rgba(CATEGORY_RGB.Unknown, alpha) },
+			];
+			return items.filter((it) => present.has(it.label));
+		}
+		if (mode === "addiction") {
+			const present = new Set<string>();
+			for (const slot of slots) {
+				if (slot.count > 0)
+					present.add(slot.addiction ? "Addiction" : "Non-addiction");
+			}
+			const items = [
+				{ label: "Addiction", color: `hsl(var(--destructive) / ${alpha})` },
+				{ label: "Non-addiction", color: rgba(CATEGORY_RGB.Work, alpha) },
+			];
+			return items.filter((it) => present.has(it.label));
+		}
+		const appCounts = new Map<string, number>();
 		for (const slot of slots) {
 			if (slot.count <= 0) continue;
-			if (mode === "categories") s.add(slot.category);
-			else s.add(slot.addiction ? "Addiction" : "Non-addiction");
+			const name = slot.appName ?? "Unknown";
+			appCounts.set(name, (appCounts.get(name) ?? 0) + slot.count);
 		}
-		return s;
-	}, [mode, slots]);
-
-	const alpha = DOT_ALPHA_BY_LEVEL[4];
-	const legend =
-		mode === "categories"
-			? ([
-					{ label: "Study", color: rgba(CATEGORY_RGB.Study, alpha) },
-					{ label: "Work", color: rgba(CATEGORY_RGB.Work, alpha) },
-					{ label: "Leisure", color: rgba(CATEGORY_RGB.Leisure, alpha) },
-					{ label: "Chores", color: rgba(CATEGORY_RGB.Chores, alpha) },
-					{ label: "Social", color: rgba(CATEGORY_RGB.Social, alpha) },
-					{ label: "Unknown", color: rgba(CATEGORY_RGB.Unknown, alpha) },
-				] as const)
-			: ([
-					{ label: "Addiction", color: `hsl(var(--destructive) / ${alpha})` },
-					{ label: "Non-addiction", color: rgba(CATEGORY_RGB.Work, alpha) },
-				] as const);
+		return Array.from(appCounts.entries())
+			.sort((a, b) => b[1] - a[1])
+			.slice(0, 8)
+			.map(([name]) => ({
+				label: name,
+				color:
+					name === "Unknown"
+						? rgba(CATEGORY_RGB.Unknown, alpha)
+						: rgba(appNameToRgb(name), alpha),
+			}));
+	}, [mode, slots, alpha]);
 
 	const intensity = [1, 2, 3, 4] as const;
 
@@ -135,17 +163,15 @@ export function DaylineLegend({
 			</div>
 
 			<div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-				{legend
-					.filter((it) => present.has(it.label))
-					.map((it) => (
-						<div key={it.label} className="flex items-center gap-1.5">
-							<span
-								className="h-2 w-2 rounded-[2px] bg-muted/20"
-								style={{ backgroundColor: it.color }}
-							/>
-							<span>{it.label}</span>
-						</div>
-					))}
+				{legend.map((it) => (
+					<div key={it.label} className="flex items-center gap-1.5">
+						<span
+							className="h-2 w-2 rounded-[2px] bg-muted/20"
+							style={{ backgroundColor: it.color }}
+						/>
+						<span className="max-w-32 truncate">{it.label}</span>
+					</div>
+				))}
 			</div>
 		</div>
 	);

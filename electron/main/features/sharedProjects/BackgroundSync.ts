@@ -1,4 +1,5 @@
 import { createLogger } from "../../infra/log";
+import { repairAllRoomKeyEnvelopes } from "../rooms/RoomsService";
 import { getIdentity } from "../social/IdentityService";
 import { syncAllRooms } from "./SharedProjectsService";
 
@@ -7,10 +8,20 @@ const logger = createLogger({ scope: "SharedProjectsBackgroundSync" });
 const SYNC_INTERVAL_MS = 5 * 60 * 1000;
 
 let syncInterval: NodeJS.Timeout | null = null;
+let hasRunRepair = false;
 
 async function runSync(): Promise<void> {
 	const identity = getIdentity();
 	if (!identity) return;
+
+	if (!hasRunRepair) {
+		hasRunRepair = true;
+		try {
+			await repairAllRoomKeyEnvelopes();
+		} catch (error) {
+			logger.warn("Key envelope repair failed", { error: String(error) });
+		}
+	}
 
 	try {
 		await syncAllRooms();

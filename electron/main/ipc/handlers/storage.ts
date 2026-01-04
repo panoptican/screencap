@@ -305,11 +305,40 @@ export function registerStorageHandlers(): void {
 	);
 
 	secureHandle(
+		IpcChannels.Storage.MarkProjectProgress,
+		ipcIdArgs,
+		(id: string) => {
+			updateEvent(id, {
+				projectProgress: 1,
+				projectProgressEvidence: "manual",
+			});
+			broadcastEventUpdated(id);
+
+			void publishEvent(id).catch((error) => {
+				logger.warn("Publish to public share failed on mark progress", {
+					eventId: id,
+					error: String(error),
+				});
+			});
+			void publishProgressEventToRoom(id).catch((error) => {
+				logger.warn("Publish to room failed on mark progress", {
+					eventId: id,
+					error: String(error),
+				});
+			});
+		},
+	);
+
+	secureHandle(
 		IpcChannels.Storage.UnmarkProjectProgress,
 		ipcIdArgs,
 		(id: string) => {
-			updateEvent(id, { projectProgress: 0 });
-			broadcastEventsChanged();
+			updateEvent(id, {
+				projectProgress: 0,
+				projectProgressEvidence: null,
+				projectProgressConfidence: null,
+			});
+			broadcastEventUpdated(id);
 		},
 	);
 

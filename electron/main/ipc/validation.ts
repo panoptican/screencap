@@ -283,6 +283,8 @@ export const ipcSetSettingsArgs = z.tuple([
 			localLlmEnabled: z.boolean(),
 			localLlmBaseUrl: zLimitedString(2000),
 			localLlmModel: zLimitedString(500),
+			autoDetectProgress: z.boolean(),
+			showDominantWebsites: z.boolean(),
 		})
 		.strict(),
 ]);

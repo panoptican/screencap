@@ -183,6 +183,8 @@ const api = {
 				IpcChannels.Storage.SubmitProjectProgressCapture,
 				input,
 			),
+		markProjectProgress: (id: string): Promise<void> =>
+			ipcRenderer.invoke(IpcChannels.Storage.MarkProjectProgress, id),
 		unmarkProjectProgress: (id: string): Promise<void> =>
 			ipcRenderer.invoke(IpcChannels.Storage.UnmarkProjectProgress, id),
 		deleteEvent: (id: string) =>

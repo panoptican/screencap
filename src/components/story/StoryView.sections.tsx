@@ -1,14 +1,18 @@
 import { format } from "date-fns";
 import {
+	AppWindow,
 	Check,
 	ChevronLeft,
 	ChevronRight,
+	Flame,
+	LayoutGrid,
 	Loader2,
 	Pencil,
 	Plus,
 	Sparkles,
 	X,
 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { MemoryCard } from "@/components/memory/MemoryCard";
 import { ProgressCard } from "@/components/progress/ProgressCard";
 import { Button } from "@/components/ui/button";
@@ -24,15 +28,35 @@ import { ContributionCalendar } from "@/components/wrapped/ContributionCalendar"
 import { CountList } from "@/components/wrapped/CountList";
 import { Metric } from "@/components/wrapped/Metric";
 import { Panel } from "@/components/wrapped/Panel";
-import { DOT_ALPHA_BY_LEVEL, rgba } from "@/lib/color";
+import { appNameToRgb, DOT_ALPHA_BY_LEVEL, rgba } from "@/lib/color";
 import {
 	CATEGORY_RGB,
 	type DaylineSlot,
 	SLOTS_PER_HOUR,
-	slotBackgroundColor,
 	slotLevel,
 	toCategory,
 } from "@/lib/dayline";
+
+export type DaylineViewMode = "categories" | "addiction" | "apps";
+
+const VIEW_MODE_ORDER: DaylineViewMode[] = ["categories", "addiction", "apps"];
+
+function slotBg(
+	slot: DaylineSlot,
+	level: 0 | 1 | 2 | 3 | 4,
+	mode: DaylineViewMode,
+) {
+	if (slot.count <= 0) return null;
+	const alpha = DOT_ALPHA_BY_LEVEL[level];
+	if (mode === "categories") return rgba(CATEGORY_RGB[slot.category], alpha);
+	if (mode === "apps") {
+		if (!slot.appName) return rgba(CATEGORY_RGB.Unknown, alpha);
+		return rgba(appNameToRgb(slot.appName), alpha);
+	}
+	if (slot.addiction) return `hsl(var(--destructive) / ${alpha})`;
+	return rgba(CATEGORY_RGB.Work, alpha);
+}
+
 import { cn } from "@/lib/utils";
 import type { Event, Memory, Story } from "@/types";
 import {
@@ -101,15 +125,189 @@ function allocateDots(
 		.map(({ category, count, dots }) => ({ category, count, dots }));
 }
 
+function slotTitle(slot: DaylineSlot, mode: DaylineViewMode): string {
+	const time = format(new Date(slot.startMs), "HH:mm");
+	if (slot.count <= 0) return `${time} · 0 captures`;
+	if (mode === "categories")
+		return `${time} · ${slot.count} captures · ${slot.category}`;
+	if (mode === "apps")
+		return `${time} · ${slot.count} captures · ${slot.appName ?? "Unknown"}`;
+	if (slot.addiction)
+		return `${time} · ${slot.count} captures · Addiction: ${slot.addiction}`;
+	return `${time} · ${slot.count} captures · Non-addiction`;
+}
+
+function slotLabel(slot: DaylineSlot, mode: DaylineViewMode): string | null {
+	if (slot.count <= 0) return null;
+	if (mode === "categories") return slot.category;
+	if (mode === "apps") return slot.appName ?? "Unknown";
+	return slot.addiction ? "Addiction" : "Non-addiction";
+}
+
+function computeSmartTimeMarkers(
+	slots: DaylineSlot[],
+	mode: DaylineViewMode,
+	selectedLabels: Set<string>,
+): { hour: number; highlight: boolean }[] {
+	const hasSelection = selectedLabels.size > 0;
+
+	// Aggregate counts per hour
+	const hourCounts = new Map<number, number>();
+	let firstHour: number | null = null;
+	let lastHour: number | null = null;
+
+	for (let i = 0; i < slots.length; i++) {
+		const slot = slots[i];
+		if (slot.count <= 0) continue;
+
+		const label = slotLabel(slot, mode);
+		if (hasSelection && (!label || !selectedLabels.has(label))) continue;
+
+		const hour = Math.floor(i / SLOTS_PER_HOUR);
+		hourCounts.set(hour, (hourCounts.get(hour) ?? 0) + slot.count);
+
+		if (firstHour === null) firstHour = hour;
+		lastHour = hour;
+	}
+
+	// No activity - show sparse default markers
+	if (firstHour === null || lastHour === null) {
+		return [
+			{ hour: 6, highlight: false },
+			{ hour: 12, highlight: false },
+			{ hour: 18, highlight: false },
+		];
+	}
+
+	// Find peak hour and start of dense activity cluster
+	let peakHour = firstHour;
+	let peakCount = 0;
+	let clusterStartHour: number | null = null;
+	let maxClusterDensity = 0;
+
+	for (const [hour, count] of hourCounts) {
+		if (count > peakCount) {
+			peakCount = count;
+			peakHour = hour;
+		}
+		// Detect start of dense clusters (look for sudden increase in activity)
+		const prevCount = hourCounts.get(hour - 1) ?? 0;
+		const density = count - prevCount;
+		if (density > maxClusterDensity && hour !== firstHour) {
+			maxClusterDensity = density;
+			clusterStartHour = hour;
+		}
+	}
+
+	const markers: { hour: number; highlight: boolean }[] = [];
+	const usedHours = new Set<number>();
+	const MIN_SPACING = 2;
+
+	const canAdd = (hour: number) => {
+		if (hour < 0 || hour >= 24) return false;
+		for (const used of usedHours) {
+			if (Math.abs(used - hour) < MIN_SPACING) return false;
+		}
+		return true;
+	};
+
+	const addMarker = (hour: number, highlight: boolean) => {
+		if (!canAdd(hour)) return false;
+		usedHours.add(hour);
+		markers.push({ hour, highlight });
+		return true;
+	};
+
+	// Priority order: first, last, peak, cluster start, then fill gaps
+	addMarker(firstHour, true);
+	addMarker(lastHour, true);
+
+	if (peakHour !== firstHour && peakHour !== lastHour) {
+		addMarker(peakHour, true);
+	}
+
+	if (
+		clusterStartHour !== null &&
+		clusterStartHour !== firstHour &&
+		clusterStartHour !== lastHour
+	) {
+		addMarker(clusterStartHour, true);
+	}
+
+	// Fill remaining gaps with evenly spaced reference points
+	const range = lastHour - firstHour;
+	if (range > 6) {
+		// Try to add intermediate markers
+		const intervals = Math.min(4, Math.floor(range / 3));
+		for (let i = 1; i < intervals; i++) {
+			const hour = Math.round(firstHour + (range * i) / intervals);
+			addMarker(hour, false);
+		}
+	}
+
+	return markers.sort((a, b) => a.hour - b.hour);
+}
+
+function DaylineTimeMarkers({
+	slots,
+	mode,
+	selectedLabels,
+}: {
+	slots: DaylineSlot[];
+	mode: DaylineViewMode;
+	selectedLabels: Set<string>;
+}) {
+	const markers = computeSmartTimeMarkers(slots, mode, selectedLabels);
+
+	// Build array of 24 hours, only showing markers where needed
+	const hours = Array.from({ length: 24 }, (_, h) => {
+		const marker = markers.find((m) => m.hour === h);
+		return marker
+			? { show: true, highlight: marker.highlight }
+			: { show: false };
+	});
+
+	return (
+		<div
+			className={cn(
+				"inline-grid grid-cols-[repeat(24,10px)] gap-1.5",
+				"lg:grid-cols-[repeat(24,12px)] lg:gap-2",
+				"2xl:grid-cols-[repeat(24,14px)] 2xl:gap-2.5",
+			)}
+		>
+			{hours.map((h, i) => (
+				<span
+					key={i}
+					className={cn(
+						"text-[10px] font-mono tracking-[0.08em] transition-all",
+						h.show
+							? h.highlight
+								? "text-foreground/70"
+								: "text-muted-foreground/50"
+							: "text-transparent",
+					)}
+				>
+					{i.toString().padStart(2, "0")}
+				</span>
+			))}
+		</div>
+	);
+}
+
 function Dayline({
 	slots,
+	mode,
+	selectedLabels,
 	className,
 }: {
 	slots: DaylineSlot[];
+	mode: DaylineViewMode;
+	selectedLabels: Set<string>;
 	className?: string;
 }) {
 	const slices = [0, 1, 2, 3, 4, 5] as const;
 	const hours = Array.from({ length: 24 }, (_, h) => h);
+	const hasSelection = selectedLabels.size > 0;
 
 	return (
 		<div className={cn("overflow-x-auto", className)}>
@@ -135,22 +333,22 @@ function Dayline({
 									const idx = h * SLOTS_PER_HOUR + s;
 									const slot = slots[idx];
 									const level = slotLevel(slot.count);
-									const bg = slotBackgroundColor(slot, level);
-									const style = bg ? { backgroundColor: bg } : undefined;
-
-									const time = format(new Date(slot.startMs), "HH:mm");
-									const label =
-										slot.count > 0
-											? `${time} · ${slot.count} captures · ${slot.addiction ? `Addiction: ${slot.addiction}` : slot.category}`
-											: `${time} · 0 captures`;
+									const bg = slotBg(slot, level, mode);
+									const title = slotTitle(slot, mode);
+									const label = slotLabel(slot, mode);
+									const isDimmed =
+										hasSelection && label && !selectedLabels.has(label);
+									const style = bg
+										? { backgroundColor: bg, opacity: isDimmed ? 0.15 : 1 }
+										: undefined;
 
 									return (
 										<div
 											key={idx}
-											title={label}
+											title={title}
 											style={style}
 											className={cn(
-												"bg-muted/50 h-2.5 w-2.5 rounded-[3px]",
+												"bg-muted/50 h-2.5 w-2.5 rounded-[3px] transition-opacity",
 												"lg:h-3 lg:w-3 lg:rounded-[4px]",
 												"2xl:h-3.5 2xl:w-3.5 2xl:rounded-[4px]",
 											)}
@@ -160,12 +358,12 @@ function Dayline({
 							</div>
 						))}
 					</div>
-					<div className="mt-3 flex justify-between font-mono text-[10px] tracking-[0.28em] text-muted-foreground">
-						<span>00</span>
-						<span>06</span>
-						<span>12</span>
-						<span>18</span>
-						<span>24</span>
+					<div className="mt-3">
+						<DaylineTimeMarkers
+							slots={slots}
+							mode={mode}
+							selectedLabels={selectedLabels}
+						/>
 					</div>
 				</div>
 			</div>
@@ -173,17 +371,65 @@ function Dayline({
 	);
 }
 
-function DayWrappedLegend() {
+function DayWrappedLegend({
+	slots,
+	mode,
+	selectedLabels,
+	onLabelToggle,
+}: {
+	slots: DaylineSlot[];
+	mode: DaylineViewMode;
+	selectedLabels: Set<string>;
+	onLabelToggle: (label: string) => void;
+}) {
 	const alpha = DOT_ALPHA_BY_LEVEL[4];
-	const legend = [
-		{ label: "Addiction", color: `hsl(var(--destructive) / ${alpha})` },
-		{ label: "Study", color: rgba(CATEGORY_RGB.Study, alpha) },
-		{ label: "Work", color: rgba(CATEGORY_RGB.Work, alpha) },
-		{ label: "Leisure", color: rgba(CATEGORY_RGB.Leisure, alpha) },
-		{ label: "Chores", color: rgba(CATEGORY_RGB.Chores, alpha) },
-		{ label: "Social", color: rgba(CATEGORY_RGB.Social, alpha) },
-		{ label: "Unknown", color: rgba(CATEGORY_RGB.Unknown, alpha) },
-	] as const;
+	const hasSelection = selectedLabels.size > 0;
+
+	const legend = (() => {
+		if (mode === "categories") {
+			const present = new Set<string>();
+			for (const slot of slots) {
+				if (slot.count > 0) present.add(slot.category);
+			}
+			const items = [
+				{ label: "Study", color: rgba(CATEGORY_RGB.Study, alpha) },
+				{ label: "Work", color: rgba(CATEGORY_RGB.Work, alpha) },
+				{ label: "Leisure", color: rgba(CATEGORY_RGB.Leisure, alpha) },
+				{ label: "Chores", color: rgba(CATEGORY_RGB.Chores, alpha) },
+				{ label: "Social", color: rgba(CATEGORY_RGB.Social, alpha) },
+				{ label: "Unknown", color: rgba(CATEGORY_RGB.Unknown, alpha) },
+			];
+			return items.filter((it) => present.has(it.label));
+		}
+		if (mode === "addiction") {
+			const present = new Set<string>();
+			for (const slot of slots) {
+				if (slot.count > 0)
+					present.add(slot.addiction ? "Addiction" : "Non-addiction");
+			}
+			const items = [
+				{ label: "Addiction", color: `hsl(var(--destructive) / ${alpha})` },
+				{ label: "Non-addiction", color: rgba(CATEGORY_RGB.Work, alpha) },
+			];
+			return items.filter((it) => present.has(it.label));
+		}
+		const appCounts = new Map<string, number>();
+		for (const slot of slots) {
+			if (slot.count <= 0) continue;
+			const name = slot.appName ?? "Unknown";
+			appCounts.set(name, (appCounts.get(name) ?? 0) + slot.count);
+		}
+		return Array.from(appCounts.entries())
+			.sort((a, b) => b[1] - a[1])
+			.slice(0, 8)
+			.map(([name]) => ({
+				label: name,
+				color:
+					name === "Unknown"
+						? rgba(CATEGORY_RGB.Unknown, alpha)
+						: rgba(appNameToRgb(name), alpha),
+			}));
+	})();
 
 	const intensity = [1, 2, 3, 4] as const;
 
@@ -211,15 +457,28 @@ function DayWrappedLegend() {
 				</div>
 
 				<div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-					{legend.map((it) => (
-						<div key={it.label} className="flex items-center gap-2">
-							<span
-								className="h-2.5 w-2.5 rounded-[3px] bg-muted/20"
-								style={{ backgroundColor: it.color }}
-							/>
-							<span>{it.label}</span>
-						</div>
-					))}
+					{legend.map((it) => {
+						const isSelected = selectedLabels.has(it.label);
+						const isDimmed = hasSelection && !isSelected;
+						return (
+							<button
+								key={it.label}
+								type="button"
+								onClick={() => onLabelToggle(it.label)}
+								className={cn(
+									"flex items-center gap-2 rounded-md px-1.5 py-0.5 transition-all hover:bg-muted/30",
+									isSelected && "ring-1 ring-foreground/30 bg-muted/20",
+									isDimmed && "opacity-40",
+								)}
+							>
+								<span
+									className="h-2.5 w-2.5 rounded-[3px] bg-muted/20"
+									style={{ backgroundColor: it.color }}
+								/>
+								<span className="max-w-32 truncate">{it.label}</span>
+							</button>
+						);
+					})}
 				</div>
 			</div>
 		</div>
@@ -520,6 +779,8 @@ export function StoryViewMain({
 	titleDate,
 	titleYear,
 	slots,
+	daylineMode,
+	onDaylineModeChange,
 	dayStats,
 	dayEvents,
 	prevDayEvents,
@@ -579,6 +840,8 @@ export function StoryViewMain({
 	titleDate: string;
 	titleYear: string;
 	slots: DaylineSlot[];
+	daylineMode: DaylineViewMode;
+	onDaylineModeChange: (mode: DaylineViewMode) => void;
 	dayStats: CategoryStat[];
 	dayEvents: Event[];
 	prevDayEvents: Event[];
@@ -633,6 +896,29 @@ export function StoryViewMain({
 	onEpisodesNextPage: () => void;
 	episodesPageEvents: Event[];
 }) {
+	const handleDaylineModeToggle = () => {
+		const idx = VIEW_MODE_ORDER.indexOf(daylineMode);
+		onDaylineModeChange(VIEW_MODE_ORDER[(idx + 1) % VIEW_MODE_ORDER.length]);
+	};
+
+	const [selectedLabels, setSelectedLabels] = useState<Set<string>>(new Set());
+
+	const handleLabelToggle = useCallback((label: string) => {
+		setSelectedLabels((prev) => {
+			const next = new Set(prev);
+			if (next.has(label)) {
+				next.delete(label);
+			} else {
+				next.add(label);
+			}
+			return next;
+		});
+	}, []);
+
+	useEffect(() => {
+		setSelectedLabels(new Set());
+	}, [daylineMode]);
+
 	const capturesDeltaValue = dayEvents.length - prevDayEvents.length;
 	const capturesDelta =
 		prevDayEvents.length > 0 || dayEvents.length > 0
@@ -854,9 +1140,33 @@ TOMORROW
 	return (
 		<div className="min-w-0 space-y-6">
 			{showJournal ? (
-				<Panel title="Day Wrapped" meta={`${titleDate} · ${titleYear}`}>
-					<Dayline slots={slots} />
-					<DayWrappedLegend />
+				<Panel
+					title="Day Wrapped"
+					meta={`${titleDate} · ${titleYear}`}
+					right={
+						<button
+							type="button"
+							aria-label={`View: ${daylineMode}`}
+							className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
+							onClick={handleDaylineModeToggle}
+						>
+							{daylineMode === "categories" && <Flame className="size-4" />}
+							{daylineMode === "addiction" && <AppWindow className="size-4" />}
+							{daylineMode === "apps" && <LayoutGrid className="size-4" />}
+						</button>
+					}
+				>
+					<Dayline
+						slots={slots}
+						mode={daylineMode}
+						selectedLabels={selectedLabels}
+					/>
+					<DayWrappedLegend
+						slots={slots}
+						mode={daylineMode}
+						selectedLabels={selectedLabels}
+						onLabelToggle={handleLabelToggle}
+					/>
 				</Panel>
 			) : null}
 

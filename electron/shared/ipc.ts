@@ -117,6 +117,7 @@ export const IpcChannels = {
 		SetEventCaption: "storage:set-event-caption",
 		SetEventProject: "storage:set-event-project",
 		SubmitProjectProgressCapture: "storage:submit-project-progress-capture",
+		MarkProjectProgress: "storage:mark-project-progress",
 		UnmarkProjectProgress: "storage:unmark-project-progress",
 		DeleteEvent: "storage:delete-event",
 		FinalizeOnboardingEvent: "storage:finalize-onboarding-event",
@@ -268,7 +269,9 @@ export interface IpcInvokeHandlers {
 	[IpcChannels.Scheduler.IsRunning]: () => boolean;
 
 	[IpcChannels.Storage.GetEvents]: (options: GetEventsOptions) => Event[];
-	[IpcChannels.Storage.GetUnifiedEvents]: (options: GetEventsOptions) => Event[];
+	[IpcChannels.Storage.GetUnifiedEvents]: (
+		options: GetEventsOptions,
+	) => Event[];
 	[IpcChannels.Storage.GetEvent]: (id: string) => Event | null;
 	[IpcChannels.Storage.GetEventScreenshots]: (
 		eventId: string,
@@ -292,6 +295,7 @@ export interface IpcInvokeHandlers {
 		caption: string;
 		project: string | null;
 	}) => void;
+	[IpcChannels.Storage.MarkProjectProgress]: (id: string) => void;
 	[IpcChannels.Storage.UnmarkProjectProgress]: (id: string) => void;
 	[IpcChannels.Storage.DeleteEvent]: (id: string) => void;
 	[IpcChannels.Storage.FinalizeOnboardingEvent]: (id: string) => void;

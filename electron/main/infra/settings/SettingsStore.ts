@@ -37,6 +37,8 @@ const DEFAULT_SETTINGS: Settings = {
 	localLlmEnabled: false,
 	localLlmBaseUrl: "http://localhost:11434/v1",
 	localLlmModel: "llama3.2",
+	autoDetectProgress: false,
+	showDominantWebsites: false,
 };
 
 const zNonEmptyString = z.string().min(1);
@@ -132,6 +134,10 @@ const settingsFileSchema: z.ZodType<Settings, z.ZodTypeDef, unknown> = z
 			DEFAULT_SETTINGS.localLlmBaseUrl,
 		),
 		localLlmModel: zLimitedString(500).catch(DEFAULT_SETTINGS.localLlmModel),
+		autoDetectProgress: z.boolean().catch(DEFAULT_SETTINGS.autoDetectProgress),
+		showDominantWebsites: z
+			.boolean()
+			.catch(DEFAULT_SETTINGS.showDominantWebsites),
 	})
 	.strip()
 	.catch(DEFAULT_SETTINGS);
