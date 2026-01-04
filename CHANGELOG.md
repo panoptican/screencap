@@ -1,3 +1,10 @@
+## [1.8.2](https://github.com/yahorbarkouski/screencap/compare/v1.8.1...v1.8.2) (2026-01-04)
+
+
+### Bug Fixes
+
+* settings ([b5bcc56](https://github.com/yahorbarkouski/screencap/commit/b5bcc56fa8a7651be5a4eb934e76a1b9cb85149a))
+
 ## [1.8.1](https://github.com/yahorbarkouski/screencap/compare/v1.8.0...v1.8.1) (2026-01-04)
 
 
