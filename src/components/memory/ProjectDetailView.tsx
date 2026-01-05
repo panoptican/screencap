@@ -1408,7 +1408,7 @@ export function ProjectDetailView({
 														<div className="space-y-2">
 															{roomState.members.map((m) => (
 																<div
-																	key={m.odlserId}
+																	key={m.userId}
 																	className="flex items-center justify-between rounded-lg border border-border bg-muted/10 px-3 py-2"
 																>
 																	<div className="text-sm text-foreground">

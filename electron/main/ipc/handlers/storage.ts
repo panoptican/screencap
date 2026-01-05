@@ -80,6 +80,7 @@ import {
 	ipcGetTimelineFacetsArgs,
 	ipcGetUnifiedEventsArgs,
 	ipcIdArgs,
+	ipcIdsArgs,
 	ipcInsertMemoryArgs,
 	ipcInsertStoryArgs,
 	ipcNoArgs,
@@ -326,6 +327,34 @@ export function registerStorageHandlers(): void {
 					error: String(error),
 				});
 			});
+		},
+	);
+
+	secureHandle(
+		IpcChannels.Storage.MarkProjectProgressBulk,
+		ipcIdsArgs,
+		(ids: string[]) => {
+			for (const id of ids) {
+				updateEvent(id, {
+					projectProgress: 1,
+					projectProgressEvidence: "eod",
+					potentialProgress: 0,
+				});
+				broadcastEventUpdated(id);
+
+				void publishEvent(id).catch((error) => {
+					logger.warn("Publish to public share failed on bulk mark progress", {
+						eventId: id,
+						error: String(error),
+					});
+				});
+				void publishProgressEventToRoom(id).catch((error) => {
+					logger.warn("Publish to room failed on bulk mark progress", {
+						eventId: id,
+						error: String(error),
+					});
+				});
+			}
 		},
 	);
 

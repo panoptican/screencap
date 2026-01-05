@@ -40,6 +40,7 @@ export const localBaselineProvider: ClassificationProvider = {
 			subcategories: [],
 			project: null,
 			project_progress: { shown: false, confidence: 0 },
+			potential_progress: false,
 			tags: [],
 			confidence: 0,
 			caption,

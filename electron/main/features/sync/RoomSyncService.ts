@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { extname } from "node:path";
+import type { DayWrappedSlot } from "../../../shared/types";
 import { getEventById } from "../../infra/db/repositories/EventRepository";
 import { getRoomIdForProject } from "../../infra/db/repositories/ProjectRoomLinkRepository";
 import { createLogger } from "../../infra/log";
@@ -11,6 +12,7 @@ import {
 } from "../rooms/RoomCrypto";
 import { getRoomKey } from "../rooms/RoomsService";
 import { signedFetch } from "../social/IdentityService";
+import { parseDayWrappedRoomPayload } from "../socialFeed/dayWrappedPayload";
 
 const logger = createLogger({ scope: "RoomSyncService" });
 
@@ -108,11 +110,32 @@ export async function publishProgressEventToRoom(
 	const roomId = getRoomIdForProject(event.project);
 	if (!roomId) return;
 
+	await publishEventToRoomInternal(event, roomId);
+}
+
+async function publishEventToRoomInternal(
+	event: {
+		id: string;
+		timestamp: number;
+		endTimestamp: number | null;
+		project: string | null;
+		category: string | null;
+		caption: string | null;
+		projectProgress: number;
+		appBundleId: string | null;
+		appName: string | null;
+		windowTitle: string | null;
+		contentKind: string | null;
+		contentTitle: string | null;
+		originalPath: string | null;
+	},
+	roomId: string,
+): Promise<void> {
 	const roomKey = await getRoomKey(roomId);
 
 	const imagePath = getUploadablePath(event.originalPath);
 	if (!imagePath) {
-		logger.warn("Event image missing or too large", { eventId });
+		logger.warn("Event image missing or too large", { eventId: event.id });
 		return;
 	}
 	const mime = mimeTypeForPath(imagePath);
@@ -140,7 +163,7 @@ export async function publishProgressEventToRoom(
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify({
-			eventId,
+			eventId: event.id,
 			timestampMs: event.timestamp,
 			payloadCiphertext: payload0,
 		}),
@@ -158,7 +181,7 @@ export async function publishProgressEventToRoom(
 	});
 
 	const imageRes = await signedFetch(
-		`/api/rooms/${roomId}/events/${eventId}/image`,
+		`/api/rooms/${roomId}/events/${event.id}/image`,
 		{
 			method: "POST",
 			headers: { "Content-Type": "application/octet-stream" },
@@ -195,7 +218,7 @@ export async function publishProgressEventToRoom(
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify({
-			eventId,
+			eventId: event.id,
 			timestampMs: event.timestamp,
 			payloadCiphertext: payload1,
 		}),
@@ -206,7 +229,16 @@ export async function publishProgressEventToRoom(
 		throw new Error(`room event update failed: ${updateRes.status} ${text}`);
 	}
 
-	logger.info("Published room event", { eventId, roomId });
+	logger.info("Published room event", { eventId: event.id, roomId });
+}
+
+export async function publishEventToRoom(params: {
+	roomId: string;
+	eventId: string;
+}): Promise<void> {
+	const event = getEventById(params.eventId);
+	if (!event) return;
+	await publishEventToRoomInternal(event, params.roomId);
 }
 
 export type DecryptedRoomEvent = {
@@ -214,6 +246,7 @@ export type DecryptedRoomEvent = {
 	roomId: string;
 	authorUserId: string;
 	timestampMs: number;
+	kind: "shared_event" | "day_wrapped";
 	endTimestampMs: number | null;
 	project: string | null;
 	category: string | null;
@@ -225,6 +258,8 @@ export type DecryptedRoomEvent = {
 	contentKind: string | null;
 	contentTitle: string | null;
 	imageRef: string | null;
+	dayStartMs?: number;
+	slots?: DayWrappedSlot[];
 };
 
 function parsePayloadV1(payload: {
@@ -232,6 +267,7 @@ function parsePayloadV1(payload: {
 	image?: { ref?: string | null };
 }): Omit<DecryptedRoomEvent, "id" | "roomId" | "authorUserId" | "timestampMs"> {
 	return {
+		kind: "shared_event",
 		endTimestampMs: null,
 		project: null,
 		category: null,
@@ -251,6 +287,7 @@ function parsePayloadV2(
 	payload: SharedEventPayload,
 ): Omit<DecryptedRoomEvent, "id" | "roomId" | "authorUserId" | "timestampMs"> {
 	return {
+		kind: "shared_event",
 		endTimestampMs: payload.endTimestamp ?? null,
 		project: payload.project ?? null,
 		category: payload.category ?? null,
@@ -297,40 +334,76 @@ export async function fetchRoomEvents(params: {
 		imageRef: string | null;
 	}>;
 
-	return events.map((e) => {
-		const payloadBytes = decryptRoomEventPayload({
-			roomKey,
-			payloadCiphertextB64: e.payloadCiphertext,
-		});
-		const payload = JSON.parse(
-			payloadBytes.toString("utf8"),
-		) as SharedEventPayload & {
-			v?: number;
-			caption?: string | null;
-			image?: { ref?: string | null };
-		};
+	const decrypted: DecryptedRoomEvent[] = [];
+	for (const e of events) {
+		try {
+			const payloadBytes = decryptRoomEventPayload({
+				roomKey,
+				payloadCiphertextB64: e.payloadCiphertext,
+			});
+			const parsedJson = JSON.parse(payloadBytes.toString("utf8")) as unknown;
 
-		const isV2 = payload.v === PAYLOAD_VERSION;
-		const parsed = isV2 ? parsePayloadV2(payload) : parsePayloadV1(payload);
+			const dayWrapped = parseDayWrappedRoomPayload(parsedJson);
+			if (dayWrapped) {
+				decrypted.push({
+					id: e.id,
+					roomId: e.roomId,
+					authorUserId: e.authorUserId,
+					timestampMs: e.timestampMs,
+					kind: "day_wrapped",
+					endTimestampMs: null,
+					project: null,
+					category: null,
+					caption: null,
+					projectProgress: 0,
+					appBundleId: null,
+					appName: null,
+					windowTitle: null,
+					contentKind: null,
+					contentTitle: null,
+					imageRef: null,
+					dayStartMs: dayWrapped.dayStartMs,
+					slots: dayWrapped.slots,
+				});
+				continue;
+			}
 
-		const imageRef = parsed.imageRef ?? e.imageRef ?? null;
+			const payload = parsedJson as SharedEventPayload & {
+				v?: number;
+				caption?: string | null;
+				image?: { ref?: string | null };
+			};
 
-		return {
-			id: e.id,
-			roomId: e.roomId,
-			authorUserId: e.authorUserId,
-			timestampMs: e.timestampMs,
-			endTimestampMs: parsed.endTimestampMs,
-			project: parsed.project,
-			category: parsed.category,
-			caption: parsed.caption,
-			projectProgress: parsed.projectProgress,
-			appBundleId: parsed.appBundleId,
-			appName: parsed.appName,
-			windowTitle: parsed.windowTitle,
-			contentKind: parsed.contentKind,
-			contentTitle: parsed.contentTitle,
-			imageRef,
-		};
-	});
+			const isV2 = payload.v === PAYLOAD_VERSION;
+			const parsed = isV2 ? parsePayloadV2(payload) : parsePayloadV1(payload);
+
+			const imageRef = parsed.imageRef ?? e.imageRef ?? null;
+
+			decrypted.push({
+				id: e.id,
+				roomId: e.roomId,
+				authorUserId: e.authorUserId,
+				timestampMs: e.timestampMs,
+				kind: "shared_event",
+				endTimestampMs: parsed.endTimestampMs,
+				project: parsed.project,
+				category: parsed.category,
+				caption: parsed.caption,
+				projectProgress: parsed.projectProgress,
+				appBundleId: parsed.appBundleId,
+				appName: parsed.appName,
+				windowTitle: parsed.windowTitle,
+				contentKind: parsed.contentKind,
+				contentTitle: parsed.contentTitle,
+				imageRef,
+			});
+		} catch (error) {
+			logger.warn("Failed to decrypt room event", {
+				roomId: params.roomId,
+				eventId: e.id,
+				error: String(error),
+			});
+		}
+	}
+	return decrypted;
 }

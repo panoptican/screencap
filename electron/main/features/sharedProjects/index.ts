@@ -10,7 +10,7 @@ export {
 	syncRoomWithBackfill,
 } from "./SharedProjectsService";
 export {
-	type GetUnifiedProjectEventsParams,
-	getUnifiedProjectEvents,
+	type GetUnifiedEventsOptions,
+	getUnifiedEvents,
 	hasLinkedRoom,
 } from "./UnifiedEventsService";

@@ -52,7 +52,7 @@ export function insertEvent(event: Partial<Event>): void {
 	const stmt = db.prepare(`
     INSERT INTO events (
       id, timestamp, end_timestamp, display_id, category, subcategories, 
-      project, project_progress, project_progress_confidence, project_progress_evidence,
+      project, project_progress, project_progress_confidence, project_progress_evidence, potential_progress,
       tags, confidence, caption, tracked_addiction, 
       addiction_candidate, addiction_confidence, addiction_prompt,
       thumbnail_path, original_path, stable_hash, detail_hash, 
@@ -60,7 +60,7 @@ export function insertEvent(event: Partial<Event>): void {
       app_bundle_id, app_name, window_title, url_host, url_canonical,
       content_kind, content_id, content_title, is_fullscreen,
       context_provider, context_confidence, context_key, context_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
 	stmt.run(
@@ -74,6 +74,7 @@ export function insertEvent(event: Partial<Event>): void {
 		event.projectProgress ?? 0,
 		event.projectProgressConfidence ?? null,
 		event.projectProgressEvidence ?? null,
+		event.potentialProgress ?? 0,
 		event.tags ?? null,
 		event.confidence ?? null,
 		event.caption ?? null,

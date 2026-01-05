@@ -15,6 +15,7 @@ export { registerSettingsHandlers } from "./settings";
 export { registerSharedProjectsHandlers } from "./sharedProjects";
 export { registerShortcutsHandlers } from "./shortcuts";
 export { registerSocialHandlers } from "./social";
+export { registerSocialFeedHandlers } from "./socialFeed";
 export { registerStorageHandlers } from "./storage";
 export { registerUpdateHandlers } from "./update";
 export { registerWindowHandlers } from "./window";

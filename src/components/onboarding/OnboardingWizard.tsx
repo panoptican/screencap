@@ -90,7 +90,7 @@ function PrimaryButton({
 			onClick={onClick}
 			disabled={disabled}
 			className={cn(
-				"inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
+				"inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
 				"border-zinc-800 bg-black/90 text-zinc-200 hover:bg-zinc-950/60 hover:border-yellow-500/40 hover:text-white",
 				"disabled:opacity-50 disabled:pointer-events-none",
 				className,
@@ -580,42 +580,43 @@ function AccessibilityStep({
 			<FadeIn delay={0}>
 				<div className="text-center space-y-3">
 					<div className="flex items-center justify-center gap-2">
-						<h1 className="text-2xl font-bold">Accessibility</h1>
+						<h1 className="text-2xl font-bold">Know What App You're In</h1>
 					</div>
-					<p className="text-sm text-muted-foreground max-w-sm mx-auto">
-						Detects the active app and window title to give rich context to your
-						timeline.
+					<p className="text-sm text-muted-foreground max-w-lg mx-auto">
+						Accessibility allows Screencap to understand a big part of the
+						screenshot event without analyzing it, makes your timeline
+						searchable and cleaner
 					</p>
 				</div>
 			</FadeIn>
-
-			<FadeIn delay={0.02}>
-				<PermissionStatusBadge status={status} />
-			</FadeIn>
-
 			<FadeIn delay={0.04}>
-				<div className="space-y-2 text-center max-w-sm mx-auto">
-					<p className="text-xs text-muted-foreground">
-						Reads only the foreground app name and window title. This enables
-						precise filtering rules and better AI categorization.
+				<div className="max-w-lg mx-auto space-y-4">
+					<div className="grid grid-cols-2 gap-3">
+						<ContextExampleCard
+							variant="without"
+							appName="Unknown"
+							detail="Screenshot captured"
+						/>
+						<ContextExampleCard
+							variant="with"
+							appName="Google Chrome"
+							detail="GitHub — Issue #331"
+						/>
+					</div>
+					<p className="text-xs text-muted-foreground text-center">
+						Toggleable in settings later
 					</p>
-					{!isGranted && (
-						<p className="text-xs text-amber-600/80 dark:text-amber-400/80 mt-2">
-							Without this, screenshots are captured blindly without knowing
-							which app is active.
-						</p>
-					)}
 				</div>
 			</FadeIn>
 
 			{!isGranted && (
-				<FadeIn delay={0.06}>
+				<FadeIn delay={0.08}>
 					<div className="flex justify-center gap-3 mb-4">
 						<PrimaryButton onClick={handleRequest} disabled={isRequesting}>
 							{isRequesting ? (
 								<Loader2 className="h-3.5 w-3.5 animate-spin" />
 							) : (
-								"Request Permission"
+								"Grant Permission"
 							)}
 						</PrimaryButton>
 						<Button variant="outline" size="sm" onClick={handleOpenSettings}>
@@ -625,6 +626,10 @@ function AccessibilityStep({
 					</div>
 				</FadeIn>
 			)}
+
+			<FadeIn delay={0.02}>
+				<PermissionStatusBadge status={status} />
+			</FadeIn>
 
 			<BottomActions
 				left={<BackButton onClick={onBack} />}
@@ -677,56 +682,54 @@ function AutomationStep({
 			<FadeIn delay={0}>
 				<div className="text-center space-y-3">
 					<div className="flex items-center justify-center gap-2">
-						<h1 className="text-2xl font-bold">Automation</h1>
+						<h1 className="text-2xl font-bold">Automation permissions</h1>
 					</div>
-					<p className="text-sm text-muted-foreground max-w-sm mx-auto">
-						Enables reading browser URLs and media info from apps like Spotify
-						for deeper insights.
+					<p className="text-sm text-muted-foreground max-w-md mx-auto">
+						These permissions let Screencap ask other apps what you're doing —
+						like which URL is open or what song is playing
 					</p>
 				</div>
 			</FadeIn>
 
-			<FadeIn delay={0.02} className="space-y-2 max-w-sm mx-auto">
-				<AutomationItem
+			<FadeIn delay={0.02} className="space-y-3 max-w-lg mx-auto">
+				<AutomationItemEnhanced
 					label="System Events"
-					description="Window detection"
 					status={automationStatus.systemEvents}
+					description="Identifies which window is focused when you have multiple apps open"
+					example={{
+						without: "Finder | Safari | Cursor",
+						with: "Cursor - Screencap workspace",
+					}}
 				/>
-				<AutomationItem
+				<AutomationItemEnhanced
 					label="Browsers"
-					description="URL from Safari, Chrome, etc."
 					status={automationStatus.browsers}
+					description="Reads the URL from Safari, Chrome, Arc, and other browsers"
+					example={{
+						without: "Safari",
+						with: "GitHub — Issue #1234",
+					}}
 				/>
-				<AutomationItem
-					label="Apps"
-					description="Spotify, Music, etc."
+				<AutomationItemEnhanced
+					label="Media Apps"
 					status={automationStatus.apps}
+					description="Captures what's playing in Spotify, Apple Music, or other media apps"
+					example={{
+						without: "Spotify",
+						with: "Spotify — Daft Punk · Get Lucky",
+					}}
 				/>
-			</FadeIn>
-
-			<FadeIn delay={0.04}>
-				<div className="text-center max-w-sm mx-auto">
-					<p className="text-xs text-muted-foreground">
-						macOS will prompt you individually for each app the first time we
-						try to access it. Click "Test" to trigger these prompts now.
-					</p>
-				</div>
 			</FadeIn>
 
 			<FadeIn delay={0.06}>
 				<div className="flex justify-center gap-3 mb-4">
-					<Button
-						onClick={handleTest}
-						variant="secondary"
-						size="sm"
-						disabled={isTesting}
-					>
+					<PrimaryButton onClick={handleTest} disabled={isTesting}>
 						{isTesting ? (
 							<Loader2 className="h-3.5 w-3.5 animate-spin" />
 						) : (
-							"Test Detection"
+							"Test changes"
 						)}
-					</Button>
+					</PrimaryButton>
 					<Button variant="outline" size="sm" onClick={handleOpenSettings}>
 						<ExternalLink className="h-3.5 w-3.5" />
 						Settings
@@ -1382,35 +1385,128 @@ function PermissionStatusBadge({
 	);
 }
 
-function AutomationItem({
+function ContextExampleCard({
+	variant,
+	appName,
+	detail,
+}: {
+	variant: "with" | "without";
+	appName: string;
+	detail: string;
+}) {
+	const isWithPermission = variant === "with";
+
+	return (
+		<div
+			className={cn(
+				"rounded-lg border p-3 space-y-2",
+				isWithPermission
+					? "border-green-500/30 bg-green-500/5"
+					: "border-zinc-700/50 bg-zinc-900/30",
+			)}
+		>
+			<div className="flex items-center gap-2">
+				{isWithPermission ? (
+					<Check className="h-3.5 w-3.5 text-green-500" />
+				) : (
+					<X className="h-3.5 w-3.5 text-zinc-500" />
+				)}
+				<span
+					className={cn(
+						"text-[10px] uppercase tracking-wide font-medium",
+						isWithPermission ? "text-green-500" : "text-zinc-500",
+					)}
+				>
+					{isWithPermission ? "With permission" : "Without"}
+				</span>
+			</div>
+			<div>
+				<p
+					className={cn(
+						"text-sm font-medium",
+						isWithPermission ? "text-zinc-200" : "text-zinc-400",
+					)}
+				>
+					{appName}
+				</p>
+				<p
+					className={cn(
+						"text-xs truncate",
+						isWithPermission ? "text-zinc-400" : "text-zinc-600",
+					)}
+				>
+					{detail}
+				</p>
+			</div>
+		</div>
+	);
+}
+
+function AutomationItemEnhanced({
 	label,
 	description,
 	status,
+	example,
 }: {
 	label: string;
 	description: string;
 	status: "granted" | "denied" | "not-determined";
+	example: { without: string; with: string };
 }) {
-	const colors = {
-		granted: "bg-green-500/20 text-green-600 dark:text-green-400",
-		denied: "bg-red-500/20 text-red-600 dark:text-red-400",
-		"not-determined": "bg-muted text-muted-foreground",
-	};
-	const labels = {
-		granted: "Granted",
-		denied: "Denied",
-		"not-determined": "Not requested",
+	const statusConfig = {
+		granted: {
+			bg: "bg-green-500/10",
+			border: "border-green-500/20",
+			badge: "bg-green-500/20 text-green-500",
+			label: "Granted",
+		},
+		denied: {
+			bg: "bg-red-500/5",
+			border: "border-red-500/20",
+			badge: "bg-red-500/20 text-red-500",
+			label: "Denied",
+		},
+		"not-determined": {
+			bg: "bg-zinc-900/50",
+			border: "border-zinc-800/50",
+			badge: "bg-zinc-700/50 text-zinc-400",
+			label: "Pending",
+		},
 	};
 
+	const config = statusConfig[status];
+
 	return (
-		<div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-			<div>
-				<p className="text-sm font-medium">{label}</p>
-				<p className="text-xs text-muted-foreground">{description}</p>
+		<div
+			className={cn(
+				"rounded-xl border p-4 space-y-3",
+				config.bg,
+				config.border,
+			)}
+		>
+			<div className="flex items-start justify-between gap-3">
+				<div className="flex-1 min-w-0">
+					<div className="flex items-center gap-2">
+						<p className="text-sm font-medium text-zinc-200">{label}</p>
+						<span
+							className={cn(
+								"text-[10px] px-1.5 py-0.5 rounded-md font-medium",
+								config.badge,
+							)}
+						>
+							{config.label}
+						</span>
+					</div>
+					<p className="text-xs text-zinc-400 mt-1">{description}</p>
+				</div>
 			</div>
-			<span className={cn("text-xs px-2 py-1 rounded-full", colors[status])}>
-				{labels[status]}
-			</span>
+			<div className="flex items-center gap-2 text-[11px]">
+				<span className="text-zinc-500 truncate">{example.without}</span>
+				<ArrowRight className="h-3 w-3 text-zinc-500 shrink-0" />
+				<span className="text-zinc-300 truncate font-medium">
+					{example.with}
+				</span>
+			</div>
 		</div>
 	);
 }

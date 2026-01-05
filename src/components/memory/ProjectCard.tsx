@@ -9,6 +9,7 @@ interface ProjectCardProps {
 	project: Memory;
 	stats?: ProjectStats;
 	isShared?: boolean;
+	sharedBy?: string;
 	onClick: () => void;
 }
 
@@ -16,6 +17,7 @@ export function ProjectCard({
 	project,
 	stats,
 	isShared = false,
+	sharedBy,
 	onClick,
 }: ProjectCardProps) {
 	const candidates = useMemo(
@@ -80,6 +82,12 @@ export function ProjectCard({
 				<h3 className="font-semibold text-lg text-foreground group-hover:text-primary transition-colors line-clamp-1 min-h-[1.75rem]">
 					{project.content}
 				</h3>
+
+				{sharedBy ? (
+					<div className="text-xs text-muted-foreground line-clamp-1">
+						Shared by @{sharedBy}
+					</div>
+				) : null}
 
 				{project.description ? (
 					<p className="text-sm text-muted-foreground line-clamp-2 leading-snug min-h-[2.5rem]">

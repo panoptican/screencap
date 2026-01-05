@@ -16,7 +16,7 @@ type EnrichedProject = {
 	project: Memory;
 	isShared: boolean;
 	roomId?: string;
-	sharedWith?: string;
+	sharedBy?: string;
 };
 
 type SharedOnlyProject = {
@@ -57,7 +57,7 @@ export function ProjectsView() {
 				project,
 				isShared: !!shared,
 				roomId: shared?.roomId,
-				sharedWith: shared?.ownerUsername,
+				sharedBy: shared && !shared.isOwner ? shared.ownerUsername : undefined,
 			});
 			seenNames.add(normalizedName);
 		}
@@ -209,13 +209,13 @@ export function ProjectsView() {
 						<div className="space-y-8">
 							{enrichedProjects.length > 0 && (
 								<div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-									{enrichedProjects.map(({ project, isShared, sharedWith }) => (
+									{enrichedProjects.map(({ project, isShared, sharedBy }) => (
 										<ProjectCard
 											key={project.id}
 											project={project}
 											stats={stats[project.content]}
 											isShared={isShared}
-											sharedWith={sharedWith}
+											sharedBy={sharedBy}
 											onClick={() => handleProjectClick(project)}
 										/>
 									))}

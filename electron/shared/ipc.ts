@@ -14,6 +14,7 @@ import type {
 	ContextStatus,
 	ContextTestResult,
 	CreateShareResult,
+	DayWrappedSnapshot,
 	EodEntry,
 	EodEntryInput,
 	Event,
@@ -118,6 +119,7 @@ export const IpcChannels = {
 		SetEventProject: "storage:set-event-project",
 		SubmitProjectProgressCapture: "storage:submit-project-progress-capture",
 		MarkProjectProgress: "storage:mark-project-progress",
+		MarkProjectProgressBulk: "storage:mark-project-progress-bulk",
 		UnmarkProjectProgress: "storage:unmark-project-progress",
 		DeleteEvent: "storage:delete-event",
 		FinalizeOnboardingEvent: "storage:finalize-onboarding-event",
@@ -139,6 +141,7 @@ export const IpcChannels = {
 	Settings: {
 		Get: "settings:get",
 		Set: "settings:set",
+		TestBackendConnection: "settings:test-backend-connection",
 	},
 	Shortcuts: {
 		SetSuspended: "shortcuts:set-suspended",
@@ -202,6 +205,12 @@ export const IpcChannels = {
 		GetEvents: "shared-projects:get-events",
 		Sync: "shared-projects:sync",
 		SyncAll: "shared-projects:sync-all",
+	},
+	SocialFeed: {
+		EnsureFriendsFeedRoom: "social-feed:ensure-friends-feed-room",
+		GetFeed: "social-feed:get-feed",
+		GetFriendDayWrapped: "social-feed:get-friend-day-wrapped",
+		PublishEventToAllFriends: "social-feed:publish-event-to-all-friends",
 	},
 	Logs: {
 		Collect: "logs:collect",
@@ -296,6 +305,7 @@ export interface IpcInvokeHandlers {
 		project: string | null;
 	}) => void;
 	[IpcChannels.Storage.MarkProjectProgress]: (id: string) => void;
+	[IpcChannels.Storage.MarkProjectProgressBulk]: (ids: string[]) => void;
 	[IpcChannels.Storage.UnmarkProjectProgress]: (id: string) => void;
 	[IpcChannels.Storage.DeleteEvent]: (id: string) => void;
 	[IpcChannels.Storage.FinalizeOnboardingEvent]: (id: string) => void;
@@ -328,6 +338,10 @@ export interface IpcInvokeHandlers {
 
 	[IpcChannels.Settings.Get]: () => Settings;
 	[IpcChannels.Settings.Set]: (settings: Settings) => void;
+	[IpcChannels.Settings.TestBackendConnection]: () => Promise<{
+		success: boolean;
+		error?: string;
+	}>;
 
 	[IpcChannels.Shortcuts.SetSuspended]: (suspended: boolean) => void;
 
@@ -441,6 +455,19 @@ export interface IpcInvokeHandlers {
 		roomId: string,
 	) => Promise<{ count: number }>;
 	[IpcChannels.SharedProjects.SyncAll]: () => Promise<void>;
+
+	[IpcChannels.SocialFeed.EnsureFriendsFeedRoom]: () => Promise<string>;
+	[IpcChannels.SocialFeed.GetFeed]: (params?: {
+		startDate?: number;
+		endDate?: number;
+		limit?: number;
+	}) => Promise<SharedEvent[]>;
+	[IpcChannels.SocialFeed.GetFriendDayWrapped]: (
+		friendUserId: string,
+	) => Promise<DayWrappedSnapshot | null>;
+	[IpcChannels.SocialFeed.PublishEventToAllFriends]: (
+		eventId: string,
+	) => Promise<void>;
 
 	[IpcChannels.Logs.Collect]: (rendererLogs?: string) => LogsCollectResult;
 	[IpcChannels.Logs.CopyToClipboard]: (rendererLogs?: string) => void;

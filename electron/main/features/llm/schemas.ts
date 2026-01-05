@@ -8,6 +8,7 @@ export const ClassificationStage1Schema = z.object({
 		shown: z.boolean(),
 		confidence: z.number().min(0).max(1),
 	}),
+	potential_progress: z.boolean(),
 	tags: z.array(z.string()),
 	confidence: z.number().min(0).max(1),
 	caption: z.string(),

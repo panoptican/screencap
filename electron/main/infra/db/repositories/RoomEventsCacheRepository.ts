@@ -296,3 +296,44 @@ export function getLatestCachedEventTimestamp(roomId: string): number | null {
 		.get(roomId) as { max_ts: number | null } | undefined;
 	return row?.max_ts ?? null;
 }
+
+export function listLatestCachedRoomEvents(params: {
+	excludeAuthorId?: string;
+	startDate?: number;
+	endDate?: number;
+	limit?: number;
+}): CachedRoomEvent[] {
+	if (!isDbOpen()) return [];
+	const db = getDatabase();
+
+	const conditions: string[] = ["1=1"];
+	const args: (string | number)[] = [];
+
+	if (params.excludeAuthorId) {
+		conditions.push("author_user_id != ?");
+		args.push(params.excludeAuthorId);
+	}
+
+	if (params.startDate !== undefined) {
+		conditions.push("timestamp_ms >= ?");
+		args.push(params.startDate);
+	}
+
+	if (params.endDate !== undefined) {
+		conditions.push("timestamp_ms <= ?");
+		args.push(params.endDate);
+	}
+
+	let sql = `SELECT ${ALL_COLUMNS}
+		FROM room_events_cache
+		WHERE ${conditions.join(" AND ")}
+		ORDER BY timestamp_ms DESC`;
+
+	if (params.limit !== undefined) {
+		sql += " LIMIT ?";
+		args.push(params.limit);
+	}
+
+	const rows = db.prepare(sql).all(...args) as CachedRoomEventRow[];
+	return rows.map(rowToEvent);
+}

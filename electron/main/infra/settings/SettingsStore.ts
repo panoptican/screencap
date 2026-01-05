@@ -9,6 +9,8 @@ const logger = createLogger({ scope: "SettingsStore" });
 
 const ONBOARDING_VERSION = 1;
 
+const DEFAULT_BACKEND_URL = "https://screencap-frontend.vercel.app";
+
 const DEFAULT_SETTINGS: Settings = {
 	apiKey: null,
 	captureInterval: 5,
@@ -31,6 +33,13 @@ const DEFAULT_SETTINGS: Settings = {
 		includeWindowTitle: false,
 		includeContentInfo: true,
 	},
+	social: {
+		dayWrapped: {
+			enabled: false,
+			includeApps: false,
+			includeAddiction: false,
+		},
+	},
 	llmEnabled: true,
 	allowVisionUploads: true,
 	cloudLlmModel: "openai/gpt-5",
@@ -39,7 +48,11 @@ const DEFAULT_SETTINGS: Settings = {
 	localLlmModel: "llama3.2",
 	autoDetectProgress: false,
 	showDominantWebsites: false,
+	customBackendEnabled: false,
+	customBackendUrl: "",
 };
+
+export { DEFAULT_BACKEND_URL };
 
 const zNonEmptyString = z.string().min(1);
 const zLimitedString = (max: number) => zNonEmptyString.max(max);
@@ -105,6 +118,26 @@ const zSharingSettings = z
 	.strip()
 	.catch(DEFAULT_SETTINGS.sharing);
 
+const zDayWrappedSharingSettings = z
+	.object({
+		enabled: z.boolean().catch(DEFAULT_SETTINGS.social.dayWrapped.enabled),
+		includeApps: z
+			.boolean()
+			.catch(DEFAULT_SETTINGS.social.dayWrapped.includeApps),
+		includeAddiction: z
+			.boolean()
+			.catch(DEFAULT_SETTINGS.social.dayWrapped.includeAddiction),
+	})
+	.strip()
+	.catch(DEFAULT_SETTINGS.social.dayWrapped);
+
+const zSocialSharingSettings = z
+	.object({
+		dayWrapped: zDayWrappedSharingSettings,
+	})
+	.strip()
+	.catch(DEFAULT_SETTINGS.social);
+
 const settingsFileSchema: z.ZodType<Settings, z.ZodTypeDef, unknown> = z
 	.object({
 		apiKey: z
@@ -126,6 +159,7 @@ const settingsFileSchema: z.ZodType<Settings, z.ZodTypeDef, unknown> = z
 		onboarding: zOnboardingState,
 		shortcuts: zShortcutSettings,
 		sharing: zSharingSettings,
+		social: zSocialSharingSettings,
 		llmEnabled: z.boolean().catch(DEFAULT_SETTINGS.llmEnabled),
 		allowVisionUploads: z.boolean().catch(DEFAULT_SETTINGS.allowVisionUploads),
 		cloudLlmModel: zLimitedString(500).catch(DEFAULT_SETTINGS.cloudLlmModel),
@@ -138,6 +172,13 @@ const settingsFileSchema: z.ZodType<Settings, z.ZodTypeDef, unknown> = z
 		showDominantWebsites: z
 			.boolean()
 			.catch(DEFAULT_SETTINGS.showDominantWebsites),
+		customBackendEnabled: z
+			.boolean()
+			.catch(DEFAULT_SETTINGS.customBackendEnabled),
+		customBackendUrl: z
+			.string()
+			.max(2000)
+			.catch(DEFAULT_SETTINGS.customBackendUrl),
 	})
 	.strip()
 	.catch(DEFAULT_SETTINGS);

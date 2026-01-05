@@ -92,6 +92,7 @@ Return ONLY valid JSON matching this schema:
     "shown": boolean,
     "confidence": number
   },
+  "potential_progress": boolean,
   "tags": string[],
   "confidence": number,
   "caption": string,
@@ -119,10 +120,12 @@ Rules:
 - If a "Selected project" is provided in CURRENT CONTEXT, you MUST set "project" to that exact value.
 - "project_progress" describes whether this screenshot shows a visual artifact of progress for the selected "project" (something a stakeholder could see: the project's UI, design mockups, prototypes, a running app, a website/staging page).
 - Do NOT require novelty. You cannot know what is "new" from a single screenshot. If it is the project's UI/prototype/design, it counts as progress evidence.
-- If "project" is null, "project_progress" MUST be {"shown": false, "confidence": 0}.
+- If "project" is null, "project_progress" MUST be {"shown": false, "confidence": 0} and "potential_progress" MUST be false.
 - Do NOT count implementation work as progress: code editors, terminals, logs, issue trackers, or Git diffs are NOT progress evidence.
 - Plain text docs (Notion/Docs/Markdown) are NOT progress evidence, but text-heavy screens inside the project's UI (dashboards, analytics, journal, settings) ARE progress evidence.
 - If "project_progress.shown" is false, "project_progress.confidence" MUST be 0.
+- "potential_progress" is true if the user is actively working on the selected project (coding, writing docs, terminal commands, issue tracking, research, design work) but not showing a visual artifact. This is work that may lead to progress but is not yet visible to stakeholders.
+- If "project_progress.shown" is true, "potential_progress" MUST be false (already confirmed progress).
 
 Categories:
 - Study: Learning, courses, reading educational content, research
@@ -178,6 +181,7 @@ Return ONLY valid JSON matching this schema:
     "shown": boolean,
     "confidence": number
   },
+  "potential_progress": boolean,
   "tags": string[],
   "confidence": number,
   "caption": string,
@@ -205,8 +209,10 @@ Rules:
 - "project" must be exactly one of the provided project names, or null.
 - If a "Selected project" is provided in CURRENT CONTEXT, you MUST set "project" to that exact value.
 - "project_progress" describes whether this activity shows a stakeholder-visible artifact for the selected "project". In text-only mode, infer from app/site and titles (e.g., Figma designs, a running app page, staging site) and be conservative.
-- If "project" is null, "project_progress" MUST be {"shown": false, "confidence": 0}.
+- If "project" is null, "project_progress" MUST be {"shown": false, "confidence": 0} and "potential_progress" MUST be false.
 - If "project_progress.shown" is false, "project_progress.confidence" MUST be 0.
+- "potential_progress" is true if the user is actively working on the selected project (coding, writing docs, terminal commands, issue tracking, research, design work) but not showing a visual artifact. This is work that may lead to progress but is not yet visible to stakeholders.
+- If "project_progress.shown" is true, "potential_progress" MUST be false (already confirmed progress).
 
 Categories:
 - Study: Learning, courses, reading educational content, research

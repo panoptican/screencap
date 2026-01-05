@@ -18,6 +18,7 @@ export function createTables(db: Database.Database): void {
       project_progress INTEGER DEFAULT 0,
       project_progress_confidence REAL,
       project_progress_evidence TEXT,
+      potential_progress INTEGER DEFAULT 0,
       tags TEXT,
       confidence REAL,
       caption TEXT,
@@ -186,6 +187,17 @@ export function createTables(db: Database.Database): void {
       content_title TEXT,
       thumbnail_path TEXT,
       original_path TEXT,
+      synced_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS room_day_wrapped_cache (
+      id TEXT PRIMARY KEY,
+      room_id TEXT NOT NULL,
+      author_user_id TEXT NOT NULL,
+      author_username TEXT NOT NULL,
+      timestamp_ms INTEGER NOT NULL,
+      day_start_ms INTEGER NOT NULL,
+      slots_json TEXT NOT NULL,
       synced_at INTEGER NOT NULL
     );
 

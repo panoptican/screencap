@@ -76,6 +76,8 @@ export const ipcDismissEventsArgs = z.tuple([
 	z.array(zLimitedString(256)).max(5000),
 ]);
 
+export const ipcIdsArgs = z.tuple([z.array(zLimitedString(256)).max(5000)]);
+
 export const ipcRelabelEventsArgs = z.tuple([
 	z.array(zLimitedString(256)).max(5000),
 	zLimitedString(200),
@@ -265,6 +267,18 @@ const zSharingSettings = z
 	})
 	.strict();
 
+const zSocialSharingSettings = z
+	.object({
+		dayWrapped: z
+			.object({
+				enabled: z.boolean(),
+				includeApps: z.boolean(),
+				includeAddiction: z.boolean(),
+			})
+			.strict(),
+	})
+	.strict();
+
 export const ipcSetSettingsArgs = z.tuple([
 	z
 		.object({
@@ -277,6 +291,7 @@ export const ipcSetSettingsArgs = z.tuple([
 			onboarding: zOnboardingState,
 			shortcuts: zShortcutSettings,
 			sharing: zSharingSettings,
+			social: zSocialSharingSettings,
 			llmEnabled: z.boolean(),
 			allowVisionUploads: z.boolean(),
 			cloudLlmModel: zLimitedString(500),
@@ -285,6 +300,8 @@ export const ipcSetSettingsArgs = z.tuple([
 			localLlmModel: zLimitedString(500),
 			autoDetectProgress: z.boolean(),
 			showDominantWebsites: z.boolean(),
+			customBackendEnabled: z.boolean(),
+			customBackendUrl: z.string().max(2000),
 		})
 		.strict(),
 ]);

@@ -347,6 +347,11 @@ async function processQueueItem(item: {
 					windowTitle: latest?.windowTitle ?? event.windowTitle,
 				});
 
+				const potentialProgress =
+					resolvedProgress !== 1 && !!project && (cached.potentialProgress ?? 0)
+						? 1
+						: 0;
+
 				updateEvent(item.eventId, {
 					category,
 					subcategories: subcategoriesJson,
@@ -357,6 +362,7 @@ async function processQueueItem(item: {
 							? (cached.projectProgressConfidence ?? null)
 							: null,
 					projectProgressEvidence: resolvedEvidence,
+					potentialProgress,
 					tags: tagsJson,
 					confidence: cached.confidence ?? null,
 					caption: resolvedCaption,
@@ -514,6 +520,11 @@ async function processQueueItem(item: {
 				}
 			}
 
+			const potentialProgress =
+				resolvedProgress !== 1 && !!project && result.potential_progress
+					? 1
+					: 0;
+
 			updateEvent(item.eventId, {
 				category,
 				subcategories: JSON.stringify(result.subcategories),
@@ -523,6 +534,7 @@ async function processQueueItem(item: {
 					? result.project_progress.confidence
 					: null,
 				projectProgressEvidence: resolvedEvidence,
+				potentialProgress,
 				tags: JSON.stringify(tags),
 				confidence: result.confidence,
 				caption: resolvedCaption,
@@ -658,8 +670,8 @@ export function isQueueProcessorRunning(): boolean {
 	return processingInterval !== null;
 }
 
-export function triggerQueueProcess(): void {
-	processQueue().catch((error) => {
+export function triggerQueueProcess(): Promise<void> {
+	return processQueue().catch((error) => {
 		logger.error("Triggered queue processing failed", { error: String(error) });
 	});
 }

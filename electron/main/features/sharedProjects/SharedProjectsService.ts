@@ -1,6 +1,11 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+	type CachedDayWrapped,
+	getLatestCachedDayWrappedTimestamp,
+	upsertCachedDayWrappedBatch,
+} from "../../infra/db/repositories/RoomDayWrappedCacheRepository";
+import {
 	type CachedRoomEvent,
 	getLatestCachedEventTimestamp,
 	listCachedRoomEvents,
@@ -19,7 +24,7 @@ import { createLogger } from "../../infra/log";
 import { getSharedRoomImagesDir } from "../../infra/paths";
 import { decryptRoomImageBytes } from "../rooms/RoomCrypto";
 import { getRoomKey } from "../rooms/RoomsService";
-import { SOCIAL_API_BASE_URL } from "../social/config";
+import { getSocialApiBaseUrl } from "../social/config";
 import { getIdentity, signedFetch } from "../social/IdentityService";
 import { fetchRoomEvents } from "../sync/RoomSyncService";
 
@@ -146,9 +151,12 @@ export async function syncRoom(
 		throw new Error("Not authenticated");
 	}
 
-	const since = backfill
-		? undefined
-		: (getLatestCachedEventTimestamp(roomId) ?? undefined);
+	const latestEventTs = getLatestCachedEventTimestamp(roomId) ?? 0;
+	const latestDayWrappedTs = getLatestCachedDayWrappedTimestamp(roomId) ?? 0;
+	const since =
+		backfill || Math.max(latestEventTs, latestDayWrappedTs) <= 0
+			? undefined
+			: Math.max(latestEventTs, latestDayWrappedTs);
 	const events = await fetchRoomEvents({
 		roomId,
 		since,
@@ -180,31 +188,57 @@ export async function syncRoom(
 	const projectName = membership?.roomName ?? null;
 
 	const now = Date.now();
-	const cachedEvents: CachedRoomEvent[] = events.map((e) => ({
-		id: e.id,
-		roomId: e.roomId,
-		authorUserId: e.authorUserId,
-		authorUsername: usernameMap.get(e.authorUserId) ?? "Unknown",
-		timestampMs: e.timestampMs,
-		endTimestampMs: e.endTimestampMs,
-		project: e.project ?? projectName,
-		category: e.category,
-		caption: e.caption,
-		projectProgress: e.projectProgress,
-		appBundleId: e.appBundleId,
-		appName: e.appName,
-		windowTitle: e.windowTitle,
-		contentKind: e.contentKind,
-		contentTitle: e.contentTitle,
-		thumbnailPath: null,
-		originalPath: null,
-		syncedAt: now,
-	}));
+	const cachedEvents: CachedRoomEvent[] = [];
+	const cachedDayWrapped: CachedDayWrapped[] = [];
+
+	for (const e of events) {
+		const authorUsername = usernameMap.get(e.authorUserId) ?? "Unknown";
+
+		if (e.kind === "day_wrapped") {
+			if (!e.dayStartMs || !e.slots) continue;
+			cachedDayWrapped.push({
+				id: e.id,
+				roomId: e.roomId,
+				authorUserId: e.authorUserId,
+				authorUsername,
+				timestampMs: e.timestampMs,
+				dayStartMs: e.dayStartMs,
+				slots: e.slots,
+				syncedAt: now,
+			});
+			continue;
+		}
+
+		cachedEvents.push({
+			id: e.id,
+			roomId: e.roomId,
+			authorUserId: e.authorUserId,
+			authorUsername,
+			timestampMs: e.timestampMs,
+			endTimestampMs: e.endTimestampMs,
+			project: e.project ?? projectName,
+			category: e.category,
+			caption: e.caption,
+			projectProgress: e.projectProgress,
+			appBundleId: e.appBundleId,
+			appName: e.appName,
+			windowTitle: e.windowTitle,
+			contentKind: e.contentKind,
+			contentTitle: e.contentTitle,
+			thumbnailPath: null,
+			originalPath: null,
+			syncedAt: now,
+		});
+	}
 
 	upsertCachedRoomEventsBatch(cachedEvents);
+	upsertCachedDayWrappedBatch(cachedDayWrapped);
 
 	const eventsWithImages = events.filter(
-		(e) => e.imageRef && e.authorUserId !== identity.userId,
+		(e) =>
+			e.kind === "shared_event" &&
+			e.imageRef &&
+			e.authorUserId !== identity.userId,
 	);
 	await downloadAndCacheImages(roomId, eventsWithImages);
 
@@ -287,9 +321,10 @@ async function downloadAndCacheImages(
 		}
 
 		try {
+			const baseUrl = getSocialApiBaseUrl();
 			const imageUrl = event.imageRef.startsWith("http")
 				? event.imageRef
-				: `${SOCIAL_API_BASE_URL}${event.imageRef}`;
+				: `${baseUrl}${event.imageRef}`;
 
 			const res = await fetch(imageUrl);
 			if (!res.ok) {

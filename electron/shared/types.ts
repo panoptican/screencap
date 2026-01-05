@@ -21,6 +21,7 @@ export interface Event {
 	projectProgress: number;
 	projectProgressConfidence: number | null;
 	projectProgressEvidence: string | null;
+	potentialProgress: number;
 	tags: string | null;
 	confidence: number | null;
 	caption: string | null;
@@ -124,6 +125,16 @@ export interface SharingSettings {
 	includeContentInfo: boolean;
 }
 
+export interface DayWrappedSharingSettings {
+	enabled: boolean;
+	includeApps: boolean;
+	includeAddiction: boolean;
+}
+
+export interface SocialSharingSettings {
+	dayWrapped: DayWrappedSharingSettings;
+}
+
 export interface Settings {
 	apiKey: string | null;
 	captureInterval: number;
@@ -134,6 +145,7 @@ export interface Settings {
 	onboarding: OnboardingState;
 	shortcuts: ShortcutSettings;
 	sharing: SharingSettings;
+	social: SocialSharingSettings;
 	llmEnabled: boolean;
 	allowVisionUploads: boolean;
 	cloudLlmModel: string;
@@ -142,6 +154,8 @@ export interface Settings {
 	localLlmModel: string;
 	autoDetectProgress: boolean;
 	showDominantWebsites: boolean;
+	customBackendEnabled: boolean;
+	customBackendUrl: string;
 }
 
 export interface ProjectRepo {
@@ -401,6 +415,7 @@ export interface ClassificationResult {
 	subcategories: string[];
 	project: string | null;
 	project_progress: ClassificationProjectProgress;
+	potential_progress: boolean;
 	tags: string[];
 	confidence: number;
 	caption: string;
@@ -628,6 +643,23 @@ export interface SharedEvent {
 	contentTitle: string | null;
 	thumbnailPath: string | null;
 	originalPath: string | null;
+}
+
+export interface DayWrappedSlot {
+	startMs: number;
+	count: number;
+	category: AutomationCategory;
+	addiction: string | null;
+	appName: string | null;
+}
+
+export interface DayWrappedSnapshot {
+	roomId: string;
+	authorUserId: string;
+	authorUsername: string;
+	publishedAtMs: number;
+	dayStartMs: number;
+	slots: DayWrappedSlot[];
 }
 
 export interface AcceptRoomInviteParams {

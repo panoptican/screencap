@@ -156,9 +156,10 @@ export function sharedEventToEvent(se: {
 	category: string | null;
 	subcategories: null;
 	project: string | null;
-	projectProgress: number | null;
+	projectProgress: number;
 	projectProgressConfidence: null;
 	projectProgressEvidence: null;
+	potentialProgress: number;
 	tags: null;
 	confidence: null;
 	caption: string | null;
@@ -173,7 +174,7 @@ export function sharedEventToEvent(se: {
 	mergedCount: null;
 	dismissed: number;
 	userLabel: null;
-	status: string;
+	status: "completed" | "pending" | "processing" | "failed";
 	appBundleId: string | null;
 	appName: string | null;
 	appIconPath: null;
@@ -190,8 +191,8 @@ export function sharedEventToEvent(se: {
 	contextConfidence: null;
 	contextKey: null;
 	contextJson: null;
-	authorUserId: string | null;
-	authorUsername: string | null;
+	authorUserId?: string;
+	authorUsername?: string;
 	isRemote: true;
 } {
 	return {
@@ -202,9 +203,10 @@ export function sharedEventToEvent(se: {
 		category: se.category ?? null,
 		subcategories: null,
 		project: se.project ?? null,
-		projectProgress: se.projectProgress ?? null,
+		projectProgress: se.projectProgress ?? 0,
 		projectProgressConfidence: null,
 		projectProgressEvidence: null,
+		potentialProgress: 0,
 		tags: null,
 		confidence: null,
 		caption: se.caption ?? null,
@@ -236,8 +238,8 @@ export function sharedEventToEvent(se: {
 		contextConfidence: null,
 		contextKey: null,
 		contextJson: null,
-		authorUserId: se.authorUserId ?? null,
-		authorUsername: se.authorUsername ?? null,
+		authorUserId: se.authorUserId ?? undefined,
+		authorUsername: se.authorUsername ?? undefined,
 		isRemote: true,
 	};
 }

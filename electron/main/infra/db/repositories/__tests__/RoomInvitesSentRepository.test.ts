@@ -105,8 +105,12 @@ vi.mock("../../connection", () => {
 
 describe("RoomInvitesSentRepository", () => {
 	beforeEach(async () => {
-		const { __resetMockData } = await import("../../connection");
-		(__resetMockData as () => void)();
+		const { __resetMockData } = (await import(
+			"../../connection"
+		)) as unknown as {
+			__resetMockData: () => void;
+		};
+		__resetMockData();
 	});
 
 	afterEach(() => {

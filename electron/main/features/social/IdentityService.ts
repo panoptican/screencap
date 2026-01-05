@@ -6,7 +6,7 @@ import {
 } from "node:crypto";
 import type { BodyInit } from "undici-types";
 import { createLogger } from "../../infra/log";
-import { SOCIAL_API_BASE_URL } from "./config";
+import { getSocialApiBaseUrl } from "./config";
 import {
 	loadIdentity,
 	type StoredPrivateKeys,
@@ -107,7 +107,8 @@ export async function registerUsername(
 	).toString("base64");
 
 	const normalized = username.trim().toLowerCase();
-	const response = await fetch(`${SOCIAL_API_BASE_URL}/api/users/register`, {
+	const baseUrl = getSocialApiBaseUrl();
+	const response = await fetch(`${baseUrl}/api/users/register`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify({
@@ -188,7 +189,8 @@ export async function signedFetch(
 		"x-sig": signature,
 	};
 
-	return await fetch(`${SOCIAL_API_BASE_URL}${normalizedPath}`, {
+	const baseUrl = getSocialApiBaseUrl();
+	return await fetch(`${baseUrl}${normalizedPath}`, {
 		method: init.method,
 		headers,
 		body: init.body as BodyInit | undefined,

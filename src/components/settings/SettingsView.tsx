@@ -9,6 +9,7 @@ import {
 	Play,
 	SlidersHorizontal,
 	Square,
+	Users,
 	Workflow,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -20,6 +21,7 @@ import {
 	SettingsTabHeader,
 } from "@/components/settings/SettingsPrimitives";
 import { ShortcutsPanel } from "@/components/settings/ShortcutsPanel";
+import { SocialTab } from "@/components/settings/SocialTab";
 import { StorageUsagePanel } from "@/components/settings/StorageUsagePanel";
 import { SystemTab } from "@/components/settings/SystemTab";
 import { Button } from "@/components/ui/button";
@@ -74,6 +76,7 @@ export function SettingsView() {
 			value === "ai" ||
 			value === "automation" ||
 			value === "data" ||
+			value === "social" ||
 			value === "system"
 		) {
 			setSettingsTab(value);
@@ -274,6 +277,10 @@ export function SettingsView() {
 						<TabsTrigger value="data" className={tabTriggerClassName}>
 							<Database className="h-4 w-4 mr-2" />
 							Data
+						</TabsTrigger>
+						<TabsTrigger value="social" className={tabTriggerClassName}>
+							<Users className="h-4 w-4 mr-2" />
+							Social
 						</TabsTrigger>
 						<TabsTrigger value="system" className={tabTriggerClassName}>
 							<SlidersHorizontal className="h-4 w-4 mr-2" />
@@ -479,6 +486,8 @@ export function SettingsView() {
 					/>
 
 					<AutomationTab settings={settings} saveSettings={saveSettings} />
+
+					<SocialTab settings={settings} updateSetting={updateSetting} />
 
 					<TabsContent value="data" className="p-6 m-0">
 						<div className="space-y-6">

@@ -332,6 +332,28 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 		onOpenChange(false);
 	};
 
+	const [isSharing, setIsSharing] = useState(false);
+	const [shareResult, setShareResult] = useState<"idle" | "ok" | "error">(
+		"idle",
+	);
+
+	const canShareToFriends = Boolean(identity && !event.isRemote);
+
+	const handleShareToFriends = useCallback(async () => {
+		if (!canShareToFriends) return;
+		setIsSharing(true);
+		setShareResult("idle");
+		try {
+			await window.api.socialFeed.publishEventToAllFriends(event.id);
+			setShareResult("ok");
+		} catch {
+			setShareResult("error");
+		} finally {
+			setIsSharing(false);
+			setTimeout(() => setShareResult("idle"), 2000);
+		}
+	}, [canShareToFriends, event.id]);
+
 	const handleMarkProgress = async () => {
 		await window.api.storage.markProjectProgress(event.id);
 		updateEvent(event.id, {
@@ -965,6 +987,21 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 									Mark as progress
 								</Button>
 							)}
+							<Button
+								variant="outline"
+								size="sm"
+								onClick={() => void handleShareToFriends()}
+								disabled={!canShareToFriends || isSharing}
+							>
+								<Users className="h-4 w-4" />
+								{shareResult === "ok"
+									? "Shared"
+									: shareResult === "error"
+										? "Share failed"
+										: isSharing
+											? "Sharing..."
+											: "Share with friends"}
+							</Button>
 							{hasAutomationOptions && (
 								<DropdownMenu>
 									<DropdownMenuTrigger asChild>

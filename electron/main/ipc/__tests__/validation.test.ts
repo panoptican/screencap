@@ -20,6 +20,13 @@ const VALID_SETTINGS: Settings = {
 		includeWindowTitle: false,
 		includeContentInfo: true,
 	},
+	social: {
+		dayWrapped: {
+			enabled: false,
+			includeApps: false,
+			includeAddiction: false,
+		},
+	},
 	llmEnabled: true,
 	allowVisionUploads: true,
 	cloudLlmModel: "openai/gpt-5",
@@ -28,6 +35,8 @@ const VALID_SETTINGS: Settings = {
 	localLlmModel: "llama3.2",
 	autoDetectProgress: true,
 	showDominantWebsites: false,
+	customBackendEnabled: false,
+	customBackendUrl: "",
 };
 
 describe("ipcSetSettingsArgs", () => {
@@ -66,6 +75,16 @@ describe("ipcSetSettingsArgs", () => {
 	it("rejects objects with missing required keys", () => {
 		const { sharing: _, ...settingsWithoutSharing } = VALID_SETTINGS;
 		const result = ipcSetSettingsArgs.safeParse([settingsWithoutSharing]);
+
+		expect(result.success).toBe(false);
+	});
+
+	it("validates social settings structure", () => {
+		const settingsWithInvalidSocial = {
+			...VALID_SETTINGS,
+			social: { dayWrapped: { enabled: "not a boolean" } },
+		};
+		const result = ipcSetSettingsArgs.safeParse([settingsWithInvalidSocial]);
 
 		expect(result.success).toBe(false);
 	});

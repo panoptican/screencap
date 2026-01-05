@@ -193,11 +193,15 @@ export async function classifyScreenshot(
 		}
 	}
 
+	const potentialProgress =
+		!!stage1.project && !projectProgress.shown && stage1.potential_progress;
+
 	const result: ClassificationResult = {
 		category: stage1.category,
 		subcategories: stage1.subcategories,
 		project: stage1.project,
 		project_progress: projectProgress,
+		potential_progress: potentialProgress,
 		tags: stage1.tags,
 		confidence: stage1.confidence,
 		caption: stage1.caption,

@@ -46,7 +46,7 @@ import type {
 	Event,
 } from "@/types";
 
-type Step = "summary" | "addictions" | "write" | "review";
+type Step = "summary" | "progress" | "addictions" | "write" | "review";
 
 const ease = [0.25, 0.1, 0.25, 1] as const;
 
@@ -238,7 +238,7 @@ function Stamp({
 	title,
 	detail,
 }: {
-	tone: "good" | "warn" | "bad";
+	tone: "good" | "warn" | "bad" | "neutral";
 	title: string;
 	detail: string;
 }) {
@@ -260,6 +260,12 @@ function Stamp({
 			border: "border-red-500/25",
 			text: "text-red-400",
 			glow: "shadow-[0_0_20px_rgba(239,68,68,0.12)]",
+		},
+		neutral: {
+			bg: "bg-zinc-500/10",
+			border: "border-zinc-500/20",
+			text: "text-zinc-400",
+			glow: "shadow-[0_0_20px_rgba(113,113,122,0.08)]",
 		},
 	}[tone];
 
@@ -357,6 +363,9 @@ export function EndOfDayFlow() {
 		null,
 	);
 	const [riskSelection, setRiskSelection] = useState<Set<string>>(new Set());
+	const [potentialProgressSelection, setPotentialProgressSelection] = useState<
+		Set<string>
+	>(new Set());
 
 	const [isSaving, setIsSaving] = useState(false);
 	const [isGenerating, setIsGenerating] = useState(false);
@@ -412,6 +421,7 @@ export function EndOfDayFlow() {
 				setContent(existing.content);
 				setSelectedSectionId(existing.content.sections[0]?.id ?? null);
 				setRiskSelection(new Set());
+				setPotentialProgressSelection(new Set());
 
 				const summarySection = existing.content.sections.find(
 					(s) => normalizeTitle(s.title) === "summary",
@@ -433,6 +443,7 @@ export function EndOfDayFlow() {
 			setContent(base);
 			setSelectedSectionId(base.sections[0]?.id ?? null);
 			setRiskSelection(new Set());
+			setPotentialProgressSelection(new Set());
 			setShouldAutoGenerate(true);
 		} finally {
 			setLoading(false);
@@ -549,6 +560,17 @@ export function EndOfDayFlow() {
 		() =>
 			events
 				.filter((e) => e.project && e.projectProgress === 1)
+				.sort((a, b) => b.timestamp - a.timestamp),
+		[events],
+	);
+
+	const potentialProgressEvents = useMemo(
+		() =>
+			events
+				.filter(
+					(e) =>
+						e.project && e.potentialProgress === 1 && e.projectProgress !== 1,
+				)
 				.sort((a, b) => b.timestamp - a.timestamp),
 		[events],
 	);
@@ -774,38 +796,51 @@ export function EndOfDayFlow() {
 		setStep("write");
 	}, [riskEvents, riskSelection]);
 
-	const stepIndex = useMemo(() => {
-		const steps: Step[] = ["summary", "addictions", "write", "review"];
-		return steps.indexOf(step) + 1;
-	}, [step]);
+	const hasPotentialProgress = potentialProgressEvents.length > 0;
 
-	const stepTotal = 4;
+	const stepIndex = useMemo(() => {
+		const steps: Step[] = hasPotentialProgress
+			? ["summary", "progress", "addictions", "write", "review"]
+			: ["summary", "addictions", "write", "review"];
+		return steps.indexOf(step) + 1;
+	}, [step, hasPotentialProgress]);
+
+	const stepTotal = hasPotentialProgress ? 5 : 4;
 
 	const nextStep = useCallback(() => {
 		setStep((s) => {
-			if (s === "summary") return "addictions";
+			if (s === "summary")
+				return hasPotentialProgress ? "progress" : "addictions";
+			if (s === "progress") return "addictions";
 			if (s === "addictions") return "write";
 			if (s === "write") return "review";
 			return s;
 		});
-	}, []);
+	}, [hasPotentialProgress]);
 
 	const prevStep = useCallback(() => {
 		setStep((s) => {
 			if (s === "review") return "write";
 			if (s === "write") return "addictions";
-			if (s === "addictions") return "summary";
+			if (s === "addictions")
+				return hasPotentialProgress ? "progress" : "summary";
+			if (s === "progress") return "summary";
 			return s;
 		});
-	}, []);
+	}, [hasPotentialProgress]);
 
 	const canGoBack = step !== "summary";
 	const canGoNext = step !== "review";
 
 	const submit = useCallback(async () => {
+		if (potentialProgressSelection.size > 0) {
+			await window.api.storage.markProjectProgressBulk(
+				Array.from(potentialProgressSelection),
+			);
+		}
 		await save(Date.now());
 		closeEod();
-	}, [closeEod, save]);
+	}, [closeEod, potentialProgressSelection, save]);
 
 	useEffect(() => {
 		if (!eodOpen) return;
@@ -950,6 +985,132 @@ export function EndOfDayFlow() {
 												</div>
 											</Card>
 										</FadeIn>
+									</>
+								) : step === "progress" ? (
+									<>
+										<FadeIn delay={0.02}>
+											<div className="text-center space-y-2 mb-6">
+												<h1 className="text-2xl font-bold">Review progress</h1>
+												<p className="text-sm text-muted-foreground">
+													Select work sessions you'd like to mark as progress
+												</p>
+											</div>
+										</FadeIn>
+
+										<FadeIn delay={0.04}>
+											{potentialProgressEvents.length === 0 ? (
+												<Stamp
+													tone="neutral"
+													title="No potential progress"
+													detail="No work sessions detected for your projects today."
+												/>
+											) : (
+												<>
+													<div className="flex items-center justify-between mb-4">
+														<div className="font-mono text-[10px] tracking-[0.28em] text-muted-foreground">
+															POTENTIAL PROGRESS (
+															{potentialProgressEvents.length})
+														</div>
+														<div className="text-xs text-muted-foreground">
+															{potentialProgressSelection.size} selected
+														</div>
+													</div>
+													<div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+														{potentialProgressEvents.slice(0, 16).map((e) => {
+															const img = primaryImagePath(e);
+															const selected = potentialProgressSelection.has(
+																e.id,
+															);
+															return (
+																<button
+																	key={e.id}
+																	type="button"
+																	className={cn(
+																		"rounded-lg border overflow-hidden text-left bg-background/30 transition-colors relative group",
+																		selected
+																			? "border-primary ring-1 ring-primary"
+																			: "border-border hover:border-primary/40",
+																	)}
+																	onClick={() => {
+																		setPotentialProgressSelection((prev) => {
+																			const next = new Set(prev);
+																			if (next.has(e.id)) next.delete(e.id);
+																			else next.add(e.id);
+																			return next;
+																		});
+																	}}
+																>
+																	<div className="aspect-video bg-muted/30 flex items-center justify-center">
+																		{img ? (
+																			<img
+																				alt=""
+																				src={`local-file://${img}`}
+																				className="w-full h-full object-cover"
+																				loading="lazy"
+																			/>
+																		) : null}
+																	</div>
+																	<div className="p-2">
+																		<div className="text-[10px] text-muted-foreground">
+																			{formatTime(e.timestamp)}
+																		</div>
+																		<div className="truncate text-xs font-medium">
+																			{e.caption ?? e.appName ?? "—"}
+																		</div>
+																		<div className="truncate text-[10px] text-muted-foreground">
+																			{e.project}
+																		</div>
+																	</div>
+																	{selected && (
+																		<div className="absolute top-1 right-1 h-4 w-4 bg-primary rounded-full flex items-center justify-center shadow-sm">
+																			<div className="h-1.5 w-1.5 bg-primary-foreground rounded-full" />
+																		</div>
+																	)}
+																</button>
+															);
+														})}
+													</div>
+												</>
+											)}
+										</FadeIn>
+
+										{progressEvents.length > 0 && (
+											<FadeIn delay={0.06} className="mt-8">
+												<div className="font-mono text-[10px] tracking-[0.28em] text-muted-foreground mb-3">
+													CONFIRMED PROGRESS ({progressEvents.length})
+												</div>
+												<div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 opacity-60">
+													{progressEvents.slice(0, 8).map((e) => {
+														const img = primaryImagePath(e);
+														return (
+															<div
+																key={e.id}
+																className="rounded-lg border border-border/50 overflow-hidden bg-background/20"
+															>
+																<div className="aspect-video bg-muted/30 flex items-center justify-center">
+																	{img ? (
+																		<img
+																			alt=""
+																			src={`local-file://${img}`}
+																			className="w-full h-full object-cover"
+																			loading="lazy"
+																		/>
+																	) : null}
+																</div>
+																<div className="p-2">
+																	<div className="text-[10px] text-muted-foreground">
+																		{formatTime(e.timestamp)}
+																	</div>
+																	<div className="truncate text-xs">
+																		{e.caption ?? e.appName ?? "—"}
+																	</div>
+																</div>
+															</div>
+														);
+													})}
+												</div>
+											</FadeIn>
+										)}
 									</>
 								) : step === "addictions" ? (
 									<>

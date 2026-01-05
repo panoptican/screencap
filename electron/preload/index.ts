@@ -16,6 +16,7 @@ import type {
 	ContextStatus,
 	ContextTestResult,
 	CreateShareResult,
+	DayWrappedSnapshot,
 	EodEntry,
 	EodEntryInput,
 	Event,
@@ -185,6 +186,8 @@ const api = {
 			),
 		markProjectProgress: (id: string): Promise<void> =>
 			ipcRenderer.invoke(IpcChannels.Storage.MarkProjectProgress, id),
+		markProjectProgressBulk: (ids: string[]): Promise<void> =>
+			ipcRenderer.invoke(IpcChannels.Storage.MarkProjectProgressBulk, ids),
 		unmarkProjectProgress: (id: string): Promise<void> =>
 			ipcRenderer.invoke(IpcChannels.Storage.UnmarkProjectProgress, id),
 		deleteEvent: (id: string) =>
@@ -233,6 +236,8 @@ const api = {
 		get: (): Promise<Settings> => ipcRenderer.invoke(IpcChannels.Settings.Get),
 		set: (settings: Settings) =>
 			ipcRenderer.invoke(IpcChannels.Settings.Set, settings),
+		testBackendConnection: (): Promise<{ success: boolean; error?: string }> =>
+			ipcRenderer.invoke(IpcChannels.Settings.TestBackendConnection),
 	},
 
 	shortcuts: {
@@ -409,6 +414,31 @@ const api = {
 			ipcRenderer.invoke(IpcChannels.SharedProjects.SyncAll),
 	},
 
+	socialFeed: {
+		ensureFriendsFeedRoom: (): Promise<string> =>
+			ipcRenderer.invoke(IpcChannels.SocialFeed.EnsureFriendsFeedRoom),
+		getFeed: (params?: {
+			startDate?: number;
+			endDate?: number;
+			limit?: number;
+		}): Promise<SharedEvent[]> => {
+			if (!params) return ipcRenderer.invoke(IpcChannels.SocialFeed.GetFeed);
+			return ipcRenderer.invoke(IpcChannels.SocialFeed.GetFeed, params);
+		},
+		getFriendDayWrapped: (
+			friendUserId: string,
+		): Promise<DayWrappedSnapshot | null> =>
+			ipcRenderer.invoke(
+				IpcChannels.SocialFeed.GetFriendDayWrapped,
+				friendUserId,
+			),
+		publishEventToAllFriends: (eventId: string): Promise<void> =>
+			ipcRenderer.invoke(
+				IpcChannels.SocialFeed.PublishEventToAllFriends,
+				eventId,
+			),
+	},
+
 	logs: {
 		collect: (rendererLogs?: string): Promise<LogsCollectResult> =>
 			ipcRenderer.invoke(IpcChannels.Logs.Collect, rendererLogs),
@@ -449,6 +479,7 @@ export {
 	type CreateShareResult,
 	type SharedProject,
 	type SharedEvent,
+	type DayWrappedSnapshot,
 	type SocialIdentity,
 	type Friend,
 	type FriendRequest,

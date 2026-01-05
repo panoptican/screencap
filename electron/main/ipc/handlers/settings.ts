@@ -4,6 +4,7 @@ import { applyLaunchAtLoginSetting } from "../../app/loginItem";
 import { triggerRetentionCleanupAfterSettingsChange } from "../../features/retention";
 import { applyShortcuts } from "../../features/shortcuts";
 import { getSettings, setSettings } from "../../infra/settings";
+import { testBackendConnection } from "../../infra/settings/BackendConfig";
 import { secureHandle } from "../secure";
 import { ipcNoArgs, ipcSetSettingsArgs } from "../validation";
 
@@ -25,6 +26,14 @@ export function registerSettingsHandlers(): void {
 			if (previous.launchAtLogin !== settings.launchAtLogin) {
 				applyLaunchAtLoginSetting(settings.launchAtLogin);
 			}
+		},
+	);
+
+	secureHandle(
+		IpcChannels.Settings.TestBackendConnection,
+		ipcNoArgs,
+		async () => {
+			return testBackendConnection();
 		},
 	);
 }

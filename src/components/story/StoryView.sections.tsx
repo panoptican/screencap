@@ -262,9 +262,11 @@ function DaylineTimeMarkers({
 	// Build array of 24 hours, only showing markers where needed
 	const hours = Array.from({ length: 24 }, (_, h) => {
 		const marker = markers.find((m) => m.hour === h);
-		return marker
-			? { show: true, highlight: marker.highlight }
-			: { show: false };
+		return {
+			hour: h,
+			show: !!marker,
+			highlight: marker?.highlight ?? false,
+		};
 	});
 
 	return (
@@ -275,9 +277,9 @@ function DaylineTimeMarkers({
 				"2xl:grid-cols-[repeat(24,14px)] 2xl:gap-2.5",
 			)}
 		>
-			{hours.map((h, i) => (
+			{hours.map((h) => (
 				<span
-					key={i}
+					key={`hour-${h.hour}`}
 					className={cn(
 						"text-[10px] font-mono tracking-[0.08em] transition-all",
 						h.show
@@ -287,7 +289,7 @@ function DaylineTimeMarkers({
 							: "text-transparent",
 					)}
 				>
-					{i.toString().padStart(2, "0")}
+					{h.hour.toString().padStart(2, "0")}
 				</span>
 			))}
 		</div>
@@ -917,7 +919,7 @@ export function StoryViewMain({
 
 	useEffect(() => {
 		setSelectedLabels(new Set());
-	}, [daylineMode]);
+	}, []);
 
 	const capturesDeltaValue = dayEvents.length - prevDayEvents.length;
 	const capturesDelta =

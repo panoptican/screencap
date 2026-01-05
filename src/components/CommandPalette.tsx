@@ -13,6 +13,7 @@ import {
 	Tag,
 	Trash2,
 	TrendingUp,
+	Users,
 	Workflow,
 } from "lucide-react";
 import { useCallback, useMemo } from "react";
@@ -213,6 +214,14 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
 							>
 								<Database className="h-4 w-4" />
 								Data
+							</Command.Item>
+							<Command.Item
+								value="settings social"
+								className={itemClassName}
+								onSelect={() => navigateToSettingsTab("social")}
+							>
+								<Users className="h-4 w-4" />
+								Social
 							</Command.Item>
 							<Command.Item
 								value="settings system"

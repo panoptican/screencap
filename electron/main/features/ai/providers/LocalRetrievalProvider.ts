@@ -268,6 +268,7 @@ export const localRetrievalProvider: ClassificationProvider = {
 			subcategories: [],
 			project,
 			project_progress: { shown: false, confidence: 0 },
+			potential_progress: false,
 			tags,
 			confidence: picked.confidence,
 			caption,

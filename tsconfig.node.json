@@ -10,7 +10,7 @@
 		"strict": true,
 		"skipLibCheck": true,
 		"noEmit": true,
-		"types": ["node"],
+		"types": ["node", "vitest/globals"],
 		"resolveJsonModule": true,
 		"isolatedModules": true
 	},

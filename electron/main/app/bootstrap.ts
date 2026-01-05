@@ -7,6 +7,7 @@ import { startRetentionService } from "../features/retention";
 import { startScheduler } from "../features/scheduler";
 import { startBackgroundSync } from "../features/sharedProjects";
 import { startShortcuts } from "../features/shortcuts";
+import { startDayWrappedPublisher } from "../features/socialFeed";
 import { initializeUpdater } from "../features/update";
 import { createLogger } from "../infra/log";
 import { getSettings } from "../infra/settings";
@@ -100,6 +101,7 @@ export async function bootstrap(): Promise<void> {
 
 	initializeUpdater();
 	startBackgroundSync();
+	startDayWrappedPublisher();
 
 	setupLifecycleHandlers();
 

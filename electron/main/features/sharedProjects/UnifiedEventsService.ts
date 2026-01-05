@@ -17,6 +17,7 @@ function cachedEventToUnifiedEvent(cached: CachedRoomEvent): Event {
 		projectProgress: cached.projectProgress,
 		projectProgressConfidence: null,
 		projectProgressEvidence: null,
+		potentialProgress: 0,
 		tags: null,
 		confidence: null,
 		caption: cached.caption,

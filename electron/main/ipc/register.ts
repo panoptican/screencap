@@ -17,6 +17,7 @@ import {
 	registerSettingsHandlers,
 	registerSharedProjectsHandlers,
 	registerShortcutsHandlers,
+	registerSocialFeedHandlers,
 	registerSocialHandlers,
 	registerStorageHandlers,
 	registerUpdateHandlers,
@@ -54,6 +55,7 @@ export function registerAllHandlers(
 	registerEodHandlers();
 	registerPublishingHandlers();
 	registerSocialHandlers();
+	registerSocialFeedHandlers();
 	registerChatHandlers();
 	registerRoomsHandlers();
 	registerSharedProjectsHandlers();

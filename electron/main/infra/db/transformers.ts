@@ -24,6 +24,7 @@ export const CAMEL_TO_SNAKE_MAP: Record<string, string> = {
 	projectProgress: "project_progress",
 	projectProgressConfidence: "project_progress_confidence",
 	projectProgressEvidence: "project_progress_evidence",
+	potentialProgress: "potential_progress",
 	thumbnailPath: "thumbnail_path",
 	originalPath: "original_path",
 	userLabel: "user_label",

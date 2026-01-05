@@ -142,6 +142,13 @@ export function runMigrations(db: Database.Database): void {
 	addColumnIfMissing(db, "events", "context_confidence", "REAL", eventsColumns);
 	addColumnIfMissing(db, "events", "context_key", "TEXT", eventsColumns);
 	addColumnIfMissing(db, "events", "context_json", "TEXT", eventsColumns);
+	addColumnIfMissing(
+		db,
+		"events",
+		"potential_progress",
+		"INTEGER DEFAULT 0",
+		eventsColumns,
+	);
 
 	db.exec(
 		"UPDATE events SET end_timestamp = timestamp WHERE end_timestamp IS NULL",

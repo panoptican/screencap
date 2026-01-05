@@ -24,6 +24,7 @@ export interface Event {
 	projectProgress: number;
 	projectProgressConfidence: number | null;
 	projectProgressEvidence: string | null;
+	potentialProgress: number;
 	tags: string | null;
 	confidence: number | null;
 	caption: string | null;
@@ -139,6 +140,16 @@ export interface SharingSettings {
 	includeContentInfo: boolean;
 }
 
+export interface DayWrappedSharingSettings {
+	enabled: boolean;
+	includeApps: boolean;
+	includeAddiction: boolean;
+}
+
+export interface SocialSharingSettings {
+	dayWrapped: DayWrappedSharingSettings;
+}
+
 export interface Settings {
 	apiKey: string | null;
 	captureInterval: number;
@@ -149,6 +160,7 @@ export interface Settings {
 	onboarding: OnboardingState;
 	shortcuts: ShortcutSettings;
 	sharing: SharingSettings;
+	social: SocialSharingSettings;
 	llmEnabled: boolean;
 	allowVisionUploads: boolean;
 	cloudLlmModel: string;
@@ -157,6 +169,8 @@ export interface Settings {
 	localLlmModel: string;
 	autoDetectProgress: boolean;
 	showDominantWebsites: boolean;
+	customBackendEnabled: boolean;
+	customBackendUrl: string;
 }
 
 export interface ProjectRepo {
@@ -278,7 +292,13 @@ export type View =
 	| "addictions"
 	| "settings";
 
-export type SettingsTab = "capture" | "ai" | "automation" | "data" | "system";
+export type SettingsTab =
+	| "capture"
+	| "ai"
+	| "automation"
+	| "data"
+	| "social"
+	| "system";
 
 export interface AutomationStatus {
 	systemEvents: "granted" | "denied" | "not-determined";
@@ -545,6 +565,23 @@ export interface SharedEvent {
 	originalPath: string | null;
 }
 
+export interface DayWrappedSlot {
+	startMs: number;
+	count: number;
+	category: AutomationCategory;
+	addiction: string | null;
+	appName: string | null;
+}
+
+export interface DayWrappedSnapshot {
+	roomId: string;
+	authorUserId: string;
+	authorUsername: string;
+	publishedAtMs: number;
+	dayStartMs: number;
+	slots: DayWrappedSlot[];
+}
+
 export interface AcceptRoomInviteParams {
 	roomId: string;
 	roomName: string;
@@ -568,6 +605,7 @@ declare global {
 				openExternal: (url: string) => Promise<void>;
 				revealInFinder: () => Promise<void>;
 				pickDirectory: () => Promise<string | null>;
+				factoryReset: () => Promise<void>;
 			};
 			update: {
 				getState: () => Promise<UpdateState>;
@@ -631,6 +669,22 @@ declare global {
 					search?: string;
 					dismissed?: boolean;
 				}) => Promise<Event[]>;
+				getUnifiedEvents: (options: {
+					limit?: number;
+					offset?: number;
+					category?: string;
+					project?: string;
+					projectProgress?: boolean;
+					trackedAddiction?: string;
+					hasTrackedAddiction?: boolean;
+					appBundleId?: string;
+					urlHost?: string;
+					startDate?: number;
+					endDate?: number;
+					search?: string;
+					dismissed?: boolean;
+					includeRemote?: boolean;
+				}) => Promise<Event[]>;
 				getEvent: (id: string) => Promise<Event | null>;
 				getEventScreenshots: (eventId: string) => Promise<EventScreenshot[]>;
 				getDiskUsage: () => Promise<StorageUsageBreakdown>;
@@ -650,6 +704,7 @@ declare global {
 					project: string | null;
 				}) => Promise<void>;
 				markProjectProgress: (id: string) => Promise<void>;
+				markProjectProgressBulk: (ids: string[]) => Promise<void>;
 				unmarkProjectProgress: (id: string) => Promise<void>;
 				deleteEvent: (id: string) => Promise<void>;
 				finalizeOnboardingEvent: (id: string) => Promise<void>;
@@ -695,6 +750,10 @@ declare global {
 			settings: {
 				get: () => Promise<Settings>;
 				set: (settings: Settings) => Promise<void>;
+				testBackendConnection: () => Promise<{
+					success: boolean;
+					error?: string;
+				}>;
 			};
 			shortcuts: {
 				setSuspended: (suspended: boolean) => Promise<void>;
@@ -797,6 +856,18 @@ declare global {
 				}) => Promise<SharedEvent[]>;
 				sync: (roomId: string) => Promise<{ count: number }>;
 				syncAll: () => Promise<void>;
+			};
+			socialFeed: {
+				ensureFriendsFeedRoom: () => Promise<string>;
+				getFeed: (params?: {
+					startDate?: number;
+					endDate?: number;
+					limit?: number;
+				}) => Promise<SharedEvent[]>;
+				getFriendDayWrapped: (
+					friendUserId: string,
+				) => Promise<DayWrappedSnapshot | null>;
+				publishEventToAllFriends: (eventId: string) => Promise<void>;
 			};
 			logs: {
 				collect: (rendererLogs?: string) => Promise<LogsCollectResult>;

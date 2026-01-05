@@ -32,6 +32,7 @@ import {
 	getIdentity,
 	signedFetch,
 } from "../social/IdentityService";
+import { isFriendsFeedRoomName } from "../socialFeed/constants";
 import {
 	createRoomKeyEnvelope,
 	decodeRoomKeyB64,
@@ -103,13 +104,10 @@ async function createRoomOnServer(params: {
 	return { roomId: room.id };
 }
 
-export async function ensureRoomForProject(params: {
-	projectName: string;
+export async function createOwnedRoom(params: {
+	name: string;
 	visibility?: "private" | "public";
 }): Promise<string> {
-	const existing = getRoomIdForProject(params.projectName);
-	if (existing) return existing;
-
 	const identity = getIdentity();
 	if (!identity) {
 		throw new Error("Not authenticated");
@@ -117,21 +115,15 @@ export async function ensureRoomForProject(params: {
 
 	const roomKey = generateRoomKey();
 	const { roomId } = await createRoomOnServer({
-		name: params.projectName,
+		name: params.name,
 		visibility: params.visibility ?? "private",
 	});
 
 	const now = Date.now();
 
-	upsertProjectRoomLink({
-		projectName: params.projectName,
-		roomId,
-		createdAt: now,
-	});
-
 	upsertRoomMembership({
 		roomId,
-		roomName: params.projectName,
+		roomName: params.name,
 		role: "owner",
 		ownerUserId: identity.userId,
 		ownerUsername: identity.username,
@@ -159,6 +151,31 @@ export async function ensureRoomForProject(params: {
 			],
 		}),
 	});
+
+	logger.info("Created room", { roomId, name: params.name });
+	return roomId;
+}
+
+export async function ensureRoomForProject(params: {
+	projectName: string;
+	visibility?: "private" | "public";
+}): Promise<string> {
+	const existing = getRoomIdForProject(params.projectName);
+	if (existing) return existing;
+
+	upsertProjectRoomLink({
+		projectName: params.projectName,
+		roomId: await createOwnedRoom({
+			name: params.projectName,
+			visibility: params.visibility,
+		}),
+		createdAt: Date.now(),
+	});
+
+	const roomId = getRoomIdForProject(params.projectName);
+	if (!roomId) {
+		throw new Error("Failed to create room");
+	}
 
 	logger.info("Created room for project", {
 		projectName: params.projectName,
@@ -357,10 +374,23 @@ export async function inviteFriendToProjectRoom(params: {
 		projectName: params.projectName,
 	});
 
+	return await inviteFriendToRoom({
+		roomId,
+		friendUserId: params.friendUserId,
+		friendUsername: params.friendUsername,
+	});
+}
+
+export async function inviteFriendToRoom(params: {
+	roomId: string;
+	friendUserId: string;
+	friendUsername?: string;
+}): Promise<{ status: "invited" | "already_member" | "already_invited" }> {
+	const roomId = params.roomId;
 	const existingStatus = getInviteStatusForFriend(roomId, params.friendUserId);
 	if (existingStatus === "member") {
 		logger.info("Friend is already a member", {
-			projectName: params.projectName,
+			roomId,
 			friendUserId: params.friendUserId,
 		});
 		return { status: "already_member" };
@@ -368,7 +398,7 @@ export async function inviteFriendToProjectRoom(params: {
 
 	if (existingStatus === "pending") {
 		logger.info("Friend already has pending invite", {
-			projectName: params.projectName,
+			roomId,
 			friendUserId: params.friendUserId,
 		});
 		return { status: "already_invited" };
@@ -427,7 +457,6 @@ export async function inviteFriendToProjectRoom(params: {
 	});
 
 	logger.info("Invited friend to room", {
-		projectName: params.projectName,
 		roomId,
 		inviteId: invite.inviteId,
 		friendUserId: params.friendUserId,
@@ -483,6 +512,16 @@ export async function acceptRoomInvite(params: {
 		joinedAt: now,
 		lastSyncedAt: null,
 	});
+
+	if (isFriendsFeedRoomName(params.roomName)) {
+		logger.info("Accepted friends feed room invite", {
+			roomId: params.roomId,
+			roomName: params.roomName,
+			ownerUsername: params.ownerUsername,
+		});
+		void triggerBackfillSync(params.roomId);
+		return;
+	}
 
 	const localProjects = getDistinctProjects();
 	const roomNameKey = projectKeyFromBase(normalizeProjectBase(params.roomName));
