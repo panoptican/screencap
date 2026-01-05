@@ -8,7 +8,7 @@ import {
 	sendPreviewToPopup,
 	showCapturePopupWindow,
 } from "../../app/capturePopup";
-import { getPopupWindow } from "../../app/popup";
+import { getPopupWindow, hidePopupWindow } from "../../app/popup";
 import { getMainWindow, showMainWindow } from "../../app/window";
 import { createLogger } from "../../infra/log";
 import { broadcast } from "../../infra/windows";
@@ -83,7 +83,7 @@ async function withWindowsHidden<T>(
 	const captureWasFocused =
 		!!capturePopup && !capturePopup.isDestroyed() && capturePopup.isFocused();
 
-	if (trayWasVisible) trayPopup?.hide();
+	if (trayWasVisible) hidePopupWindow();
 	if (captureWasVisible) capturePopup?.hide();
 	if (mainWasVisible) main?.hide();
 

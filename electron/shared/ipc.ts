@@ -192,6 +192,7 @@ export const IpcChannels = {
 		OpenProjectThread: "chat:open-project-thread",
 		FetchMessages: "chat:fetch-messages",
 		SendMessage: "chat:send-message",
+		MarkThreadRead: "chat:mark-thread-read",
 	},
 	Rooms: {
 		EnsureProjectRoom: "rooms:ensure-project-room",
@@ -230,6 +231,7 @@ export const IpcEvents = {
 	EventsChanged: "events:changed",
 	ProjectsNormalized: "projects:normalized",
 	UpdateState: "update:state",
+	PopupResetToPersonal: "popup:reset-to-personal",
 	ShortcutCaptureNow: "shortcut:capture-now",
 	ShortcutCaptureProjectProgressPreview:
 		"shortcut:capture-project-progress-preview",
@@ -427,6 +429,10 @@ export interface IpcInvokeHandlers {
 		threadId: string,
 		text: string,
 	) => Promise<void>;
+	[IpcChannels.Chat.MarkThreadRead]: (
+		threadId: string,
+		lastReadTimestampMs?: number,
+	) => Promise<void>;
 
 	[IpcChannels.Rooms.EnsureProjectRoom]: (
 		projectName: string,
@@ -499,6 +505,7 @@ export interface IpcEventPayloads {
 	[IpcEvents.EventsChanged]: undefined;
 	[IpcEvents.ProjectsNormalized]: { updatedRows: number; groups: number };
 	[IpcEvents.UpdateState]: UpdateState;
+	[IpcEvents.PopupResetToPersonal]: undefined;
 	[IpcEvents.ShortcutCaptureNow]: undefined;
 	[IpcEvents.ShortcutCaptureProjectProgressPreview]: ProjectProgressPreview;
 	[IpcEvents.ShortcutCaptureProjectProgress]: string | null;

@@ -3,5 +3,7 @@ export * from "./DayWrappedPublisher";
 export * from "./dayWrapped";
 export * from "./dayWrappedPayload";
 export * from "./FriendsFeedRoomService";
+export * from "./SocialCommentNotificationsService";
 export * from "./SocialFeedPublishService";
 export * from "./SocialFeedService";
+export * from "./UnreadCommentState";

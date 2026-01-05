@@ -16,6 +16,10 @@ extraResources:
     to: ocr
     filter:
       - screencap-ocr
+  - from: electron/assets/sounds
+    to: sounds
+    filter:
+      - notification.wav
 asarUnpack:
   - node_modules/sharp/**/*
   - node_modules/better-sqlite3/**/*

@@ -3,16 +3,11 @@ import {
 	Activity,
 	AppWindow,
 	ChevronLeft,
-	Expand,
-	ExternalLink,
-	Flame,
-	Globe,
 	Music,
 	Plus,
-	SendHorizontal,
 	UserPlus,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSettings } from "@/hooks/useSettings";
@@ -23,7 +18,7 @@ import {
 	SLOTS_PER_DAY,
 	toCategory,
 } from "@/lib/dayline";
-import { encodeEventComment, parseEventComment } from "@/lib/socialComments";
+import { encodeEventComment } from "@/lib/socialComments";
 import type {
 	ChatMessage,
 	DayWrappedSnapshot,
@@ -33,13 +28,10 @@ import type {
 	SharedEvent,
 	SocialIdentity,
 } from "@/types";
-import {
-	Dayline,
-	DaylineTimeMarkers,
-	type DaylineViewMode,
-	DayWrappedLegend,
-	VIEW_MODE_ORDER,
-} from "./Dayline";
+import { AvatarDisplay } from "./AvatarDisplay";
+import { type DaylineViewMode, VIEW_MODE_ORDER } from "./Dayline";
+import { PersonView } from "./PersonView";
+import { SharedEventDetail } from "./SharedEventDetail";
 
 const READ_EVENTS_STORAGE_KEY = "screencap:readEventIds";
 const MAX_STORED_READ_IDS = 500;
@@ -66,74 +58,28 @@ function markEventsAsRead(eventIds: string[]): void {
 
 type View = "list" | "add" | "detail";
 
-function initials(username: string): string {
-	const trimmed = username.trim();
-	if (!trimmed) return "??";
-	return trimmed.slice(0, 2).toUpperCase();
-}
-
-function AvatarDisplay({
-	username,
-	size,
-	isOwn,
-	ownAvatarUrl,
-	avatarSettings,
-	className,
-}: {
+export type SocialTraySelectedEventMeta = {
 	username: string;
-	size: "xs" | "sm" | "md" | "lg";
-	isOwn?: boolean;
-	ownAvatarUrl?: string | null;
-	avatarSettings?: {
-		pattern: string;
-		backgroundColor: string;
-		foregroundColor: string;
-	} | null;
-	className?: string;
-}) {
-	const sizeClasses = {
-		xs: "h-5 w-5 text-[9px]",
-		sm: "h-6 w-6 text-[10px]",
-		md: "h-9 w-9 text-xs",
-		lg: "h-12 w-12 text-lg",
-	};
-	const sizePx = { xs: 20, sm: 24, md: 36, lg: 48 };
+	isOwn: boolean;
+	ownAvatarUrl: string | null;
+	avatarSettings: Friend["avatarSettings"] | null;
+};
 
-	const avatarUrl = useMemo(() => {
-		if (isOwn && ownAvatarUrl) return ownAvatarUrl;
-		if (avatarSettings) {
-			const letter = username.charAt(0).toUpperCase();
-			return generateAvatarDataUrl(
-				letter,
-				sizePx[size] * 2,
-				avatarSettings as Parameters<typeof generateAvatarDataUrl>[2],
-			);
-		}
-		return null;
-	}, [isOwn, ownAvatarUrl, avatarSettings, username, size]);
-
-	if (avatarUrl) {
-		return (
-			<div
-				className={`${sizeClasses[size]} shrink-0 rounded-lg overflow-hidden border border-primary/40 ${className ?? ""}`}
-			>
-				<img
-					src={avatarUrl}
-					alt={username}
-					className="h-full w-full object-cover"
-				/>
-			</div>
-		);
-	}
-
-	return (
-		<div
-			className={`${sizeClasses[size]} shrink-0 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/20 flex items-center justify-center font-medium text-foreground/80 ${className ?? ""}`}
-		>
-			{initials(username)}
-		</div>
-	);
-}
+export type SocialTrayTopHeaderState =
+	| {
+			kind: "event";
+			username: string;
+			isOwn: boolean;
+			ownAvatarUrl: string | null;
+			avatarSettings: Friend["avatarSettings"] | null;
+			onBack: () => void;
+	  }
+	| {
+			kind: "friend";
+			username: string;
+			avatarSettings: Friend["avatarSettings"] | null;
+			onBack: () => void;
+	  };
 
 function timeAgo(timestampMs: number): string {
 	const diffMs = Date.now() - timestampMs;
@@ -161,10 +107,25 @@ function toDaylineSlots(snapshot: DayWrappedSnapshot): DaylineSlot[] {
 	}));
 }
 
-export function SocialTray() {
+export function SocialTray({
+	selectedEvent: selectedEventProp,
+	onSelectedEventChange,
+	onSelectedEventMetaChange,
+	onTopHeaderChange,
+	useExternalHeader = false,
+}: {
+	selectedEvent?: SharedEvent | null;
+	onSelectedEventChange?: (event: SharedEvent | null) => void;
+	onSelectedEventMetaChange?: (
+		meta: SocialTraySelectedEventMeta | null,
+	) => void;
+	onTopHeaderChange?: (state: SocialTrayTopHeaderState | null) => void;
+	useExternalHeader?: boolean;
+} = {}) {
 	const [view, setView] = useState<View>("list");
 	const [selectedFriend, setSelectedFriend] = useState<Friend | null>(null);
-	const [selectedEvent, setSelectedEvent] = useState<SharedEvent | null>(null);
+	const [internalSelectedEvent, setInternalSelectedEvent] =
+		useState<SharedEvent | null>(null);
 
 	const [identity, setIdentity] = useState<SocialIdentity | null>(null);
 	const [friends, setFriends] = useState<Friend[]>([]);
@@ -198,8 +159,13 @@ export function SocialTray() {
 	const [commentThreadId, setCommentThreadId] = useState<string | null>(null);
 	const [commentMessages, setCommentMessages] = useState<ChatMessage[]>([]);
 	const [commentError, setCommentError] = useState<string | null>(null);
+	const lastCommentTimestampRef = useRef<number>(0);
 
 	const { settings } = useSettings();
+
+	const selectedEvent =
+		selectedEventProp !== undefined ? selectedEventProp : internalSelectedEvent;
+	const setSelectedEvent = onSelectedEventChange ?? setInternalSelectedEvent;
 
 	const myAvatarUrl = useMemo(() => {
 		if (!identity) return null;
@@ -210,6 +176,98 @@ export function SocialTray() {
 			settings.avatar ?? getDefaultAvatarSettings(),
 		);
 	}, [identity, settings.avatar]);
+
+	useEffect(() => {
+		if (!selectedEvent) {
+			setCommentText("");
+			setCommentMessages([]);
+			setCommentThreadId(null);
+			setCommentError(null);
+		}
+	}, [selectedEvent]);
+
+	useEffect(() => {
+		lastCommentTimestampRef.current =
+			commentMessages.length > 0
+				? (commentMessages[commentMessages.length - 1]?.timestampMs ?? 0)
+				: 0;
+	}, [commentMessages]);
+
+	// Live-refresh comments while the event detail is open.
+	useEffect(() => {
+		if (!window.api?.chat) return;
+		if (!selectedEvent || !commentThreadId) return;
+
+		let cancelled = false;
+		let inFlight = false;
+
+		const poll = async () => {
+			if (cancelled) return;
+			if (inFlight) return;
+			inFlight = true;
+			try {
+				const baseSince = Math.max(
+					0,
+					selectedEvent.timestampMs - 7 * 24 * 60 * 60 * 1000,
+				);
+				const since = Math.max(baseSince, lastCommentTimestampRef.current);
+				const next = await window.api.chat.fetchMessages(
+					commentThreadId,
+					since,
+				);
+				if (cancelled) return;
+				if (next.length > 0) {
+					setCommentMessages((prev) => [...prev, ...next]);
+					const lastTs =
+						next[next.length - 1]?.timestampMs ??
+						lastCommentTimestampRef.current ??
+						Date.now();
+					try {
+						await window.api.chat.markThreadRead(commentThreadId, lastTs);
+					} catch {}
+				}
+				setCommentError(null);
+			} catch (e) {
+				if (cancelled) return;
+				setCommentError(String(e));
+			} finally {
+				inFlight = false;
+			}
+		};
+
+		// Poll quickly while open so it feels real-time-ish.
+		const interval = setInterval(() => void poll(), 5_000);
+		void poll();
+
+		return () => {
+			cancelled = true;
+			clearInterval(interval);
+		};
+	}, [commentThreadId, selectedEvent]);
+
+	useEffect(() => {
+		if (!onSelectedEventMetaChange) return;
+		if (!selectedEvent || !identity) {
+			onSelectedEventMetaChange(null);
+			return;
+		}
+		const isOwn = selectedEvent.authorUserId === identity.userId;
+		const avatarSettings =
+			friends.find((f) => f.userId === selectedEvent.authorUserId)
+				?.avatarSettings ?? null;
+		onSelectedEventMetaChange({
+			username: selectedEvent.authorUsername,
+			isOwn,
+			ownAvatarUrl: myAvatarUrl,
+			avatarSettings,
+		});
+	}, [
+		friends,
+		identity,
+		myAvatarUrl,
+		onSelectedEventMetaChange,
+		selectedEvent,
+	]);
 
 	const refresh = useCallback(async () => {
 		if (!window.api?.social) return;
@@ -264,10 +322,10 @@ export function SocialTray() {
 			for (const id of ownEventIds) {
 				try {
 					const localEvent = await window.api.storage.getEvent(id);
-					if (localEvent?.thumbnailPath) {
-						pathMap.set(id, `local-file://${localEvent.thumbnailPath}`);
-					} else if (localEvent?.originalPath) {
+					if (localEvent?.originalPath) {
 						pathMap.set(id, `local-file://${localEvent.originalPath}`);
+					} else if (localEvent?.thumbnailPath) {
+						pathMap.set(id, `local-file://${localEvent.thumbnailPath}`);
 					}
 				} catch {}
 			}
@@ -299,6 +357,16 @@ export function SocialTray() {
 		});
 	}, []);
 
+	const selectedFriendSlots = useMemo(
+		() => (selectedDayWrapped ? toDaylineSlots(selectedDayWrapped) : []),
+		[selectedDayWrapped],
+	);
+
+	const selectedFriendUpdatedLabel = useMemo(() => {
+		if (!selectedDayWrapped) return null;
+		return `Updated ${timeAgo(selectedDayWrapped.publishedAtMs)}`;
+	}, [selectedDayWrapped]);
+
 	const openFriend = useCallback(async (friend: Friend) => {
 		setSelectedFriend(friend);
 		setSelectedDayWrapped(null);
@@ -324,36 +392,34 @@ export function SocialTray() {
 			setCommentError(null);
 
 			try {
+				try {
+					const localEvent = await window.api.storage.getEvent(event.id);
+					const localPath =
+						localEvent?.originalPath ?? localEvent?.thumbnailPath;
+					if (localPath) {
+						setLocalEventPaths((prev) => {
+							const next = new Map(prev);
+							next.set(event.id, `local-file://${localPath}`);
+							return next;
+						});
+					}
+				} catch {}
 				const threadId = await window.api.chat.openProjectThread(event.roomId);
 				setCommentThreadId(threadId);
 				const since = Math.max(0, event.timestampMs - 7 * 24 * 60 * 60 * 1000);
 				const messages = await window.api.chat.fetchMessages(threadId, since);
 				setCommentMessages(messages);
+				const lastTs = messages.length
+					? (messages[messages.length - 1]?.timestampMs ?? Date.now())
+					: Date.now();
+				try {
+					await window.api.chat.markThreadRead(threadId, lastTs);
+				} catch {}
 			} catch (e) {
 				setCommentError(String(e));
 			}
 		},
-		[identity],
-	);
-
-	const closeEvent = useCallback(() => {
-		setSelectedEvent(null);
-		setCommentText("");
-		setCommentMessages([]);
-		setCommentThreadId(null);
-		setCommentError(null);
-	}, []);
-
-	const expandEventImage = useCallback(
-		async (event: SharedEvent) => {
-			// Merge local image path into event for preview
-			const localSrc = localEventPaths.get(event.id);
-			const eventWithLocalPath = localSrc
-				? { ...event, originalPath: localSrc.replace("local-file://", "") }
-				: event;
-			await window.api?.app.previewEvent(eventWithLocalPath);
-		},
-		[localEventPaths],
+		[identity, setSelectedEvent],
 	);
 
 	const sendComment = useCallback(async () => {
@@ -388,6 +454,49 @@ export function SocialTray() {
 		setDaylineMode("categories");
 		setView("list");
 	}, []);
+
+	useEffect(() => {
+		if (!onTopHeaderChange) return;
+
+		if (selectedEvent && identity) {
+			const isOwn = selectedEvent.authorUserId === identity.userId;
+			const avatarSettings =
+				friends.find((f) => f.userId === selectedEvent.authorUserId)
+					?.avatarSettings ?? null;
+
+			onTopHeaderChange({
+				kind: "event",
+				username: selectedEvent.authorUsername,
+				isOwn,
+				ownAvatarUrl: myAvatarUrl,
+				avatarSettings,
+				onBack: () => setSelectedEvent(null),
+			});
+			return;
+		}
+
+		if (!selectedEvent && view === "detail" && selectedFriend) {
+			onTopHeaderChange({
+				kind: "friend",
+				username: selectedFriend.username,
+				avatarSettings: selectedFriend.avatarSettings,
+				onBack: closeFriend,
+			});
+			return;
+		}
+
+		onTopHeaderChange(null);
+	}, [
+		closeFriend,
+		friends,
+		identity,
+		myAvatarUrl,
+		onTopHeaderChange,
+		selectedEvent,
+		selectedFriend,
+		setSelectedEvent,
+		view,
+	]);
 
 	const incomingFriendRequests = useMemo(() => {
 		if (!identity) return [];
@@ -563,233 +672,20 @@ export function SocialTray() {
 	}
 
 	if (selectedEvent) {
-		const usersById = new Map<string, string>();
-		usersById.set(identity.userId, identity.username);
-		for (const f of friends) usersById.set(f.userId, f.username);
-
-		const parsedComments = commentMessages
-			.map((m) => {
-				const parsed = parseEventComment(m.text);
-				if (!parsed || parsed.eventId !== selectedEvent.id) return null;
-				return {
-					id: m.id,
-					authorUserId: m.authorUserId,
-					authorUsername:
-						usersById.get(m.authorUserId) ?? m.authorUserId.slice(0, 8),
-					timestampMs: m.timestampMs,
-					text: parsed.text,
-				};
-			})
-			.filter((v): v is NonNullable<typeof v> => v !== null)
-			.sort((a, b) => a.timestampMs - b.timestampMs);
-
-		const eventImageSrcValue =
-			localEventPaths.get(selectedEvent.id) ?? eventImageSrc(selectedEvent);
-		const isOwnEvent = selectedEvent.authorUserId === identity.userId;
-		const indicatorColor = getCategoryIndicatorColor(selectedEvent.category);
-
 		return (
 			<div className="relative h-[400px] w-full overflow-hidden">
-				<div className="absolute inset-0 flex flex-col">
-					<div className="flex items-center justify-between pb-2 mb-2 border-b border-border/40">
-						<Button
-							variant="ghost"
-							size="icon"
-							className="h-6 w-6 -ml-2 rounded-full hover:bg-muted/20"
-							onClick={closeEvent}
-						>
-							<ChevronLeft className="h-4 w-4 text-muted-foreground" />
-						</Button>
-						<div className="flex items-center gap-2">
-							<div className="relative">
-								<AvatarDisplay
-									username={selectedEvent.authorUsername}
-									size="xs"
-									isOwn={isOwnEvent}
-									ownAvatarUrl={myAvatarUrl}
-								/>
-								<div
-									className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-background"
-									style={{ backgroundColor: indicatorColor }}
-								/>
-							</div>
-							<span className="text-xs font-medium text-foreground/90">
-								{isOwnEvent ? "You" : `@${selectedEvent.authorUsername}`}
-							</span>
-						</div>
-						<div className="w-6" />
-					</div>
-
-					<div className="flex-1 overflow-y-auto -mr-2 pr-2 custom-scrollbar space-y-3 pb-4">
-						<div className="group relative rounded-lg overflow-hidden bg-black/20">
-							{eventImageSrcValue ? (
-								<img
-									src={eventImageSrcValue}
-									alt=""
-									className="w-full aspect-[2/1] object-cover"
-								/>
-							) : (
-								<div className="w-full aspect-[2/1] flex items-center justify-center">
-									<div className="text-[10px] text-muted-foreground opacity-50 uppercase tracking-widest font-mono">
-										Screenshot
-									</div>
-								</div>
-							)}
-							<button
-								type="button"
-								className="absolute top-2 right-2 h-7 w-7 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/70"
-								onClick={() => void expandEventImage(selectedEvent)}
-							>
-								<Expand className="h-3.5 w-3.5 text-white" />
-							</button>
-						</div>
-
-						{(selectedEvent.appName || selectedEvent.windowTitle) && (
-							<div className="text-xs text-muted-foreground px-1">
-								{selectedEvent.appName && (
-									<span className="text-foreground/80">
-										{selectedEvent.appName}
-									</span>
-								)}
-								{selectedEvent.appName && selectedEvent.windowTitle && (
-									<span className="mx-1">·</span>
-								)}
-								{selectedEvent.windowTitle && (
-									<span className="opacity-70 truncate">
-										{selectedEvent.windowTitle}
-									</span>
-								)}
-							</div>
-						)}
-
-						{(selectedEvent.url || selectedEvent.background?.length > 0) && (
-							<div className="flex flex-wrap gap-2 px-1">
-								{selectedEvent.url && (
-									<button
-										type="button"
-										className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/10 hover:bg-muted/20 transition-colors text-xs"
-										onClick={() =>
-											window.api?.app.openExternal(selectedEvent.url!)
-										}
-									>
-										<Globe className="h-3 w-3 text-muted-foreground" />
-										<span className="max-w-[120px] truncate text-foreground/80">
-											{(() => {
-												try {
-													return new URL(selectedEvent.url).hostname;
-												} catch {
-													return selectedEvent.url;
-												}
-											})()}
-										</span>
-										<ExternalLink className="h-2.5 w-2.5 text-muted-foreground/50" />
-									</button>
-								)}
-								{selectedEvent.background?.[0] && (
-									<button
-										type="button"
-										className="flex items-center gap-2 px-2 py-1 rounded-md bg-muted/10 hover:bg-muted/20 transition-colors"
-										onClick={() => {
-											const item = selectedEvent.background[0];
-											if (item?.actionUrl) {
-												window.api?.app.openExternal(item.actionUrl);
-											}
-										}}
-										disabled={!selectedEvent.background[0].actionUrl}
-									>
-										{selectedEvent.background[0].imageUrl ? (
-											<img
-												src={selectedEvent.background[0].imageUrl}
-												alt=""
-												className="h-6 w-6 rounded object-cover"
-											/>
-										) : (
-											<div className="flex h-6 w-6 items-center justify-center rounded bg-muted/20">
-												<Music className="h-3 w-3 text-muted-foreground" />
-											</div>
-										)}
-										<div className="flex flex-col items-start text-left max-w-[140px]">
-											<span className="text-[10px] font-medium leading-none truncate w-full">
-												{selectedEvent.background[0].title}
-											</span>
-											{selectedEvent.background[0].subtitle && (
-												<span className="text-[9px] text-muted-foreground truncate w-full">
-													{selectedEvent.background[0].subtitle}
-												</span>
-											)}
-										</div>
-										{selectedEvent.background[0].actionUrl && (
-											<ExternalLink className="h-2.5 w-2.5 text-muted-foreground/50 flex-shrink-0" />
-										)}
-									</button>
-								)}
-							</div>
-						)}
-
-						<div className="pt-3 border-t border-border/30">
-							<div className="text-[9px] font-mono tracking-[0.2em] text-muted-foreground mb-3 px-1">
-								COMMENTS
-							</div>
-							{commentError && (
-								<div className="text-[10px] text-destructive px-1 mb-2">
-									{commentError}
-								</div>
-							)}
-							{parsedComments.length === 0 ? (
-								<div className="text-xs text-muted-foreground text-center py-6">
-									No comments yet
-								</div>
-							) : (
-								<div className="space-y-2">
-									{parsedComments.map((c) => (
-										<div
-											key={c.id}
-											className="rounded-lg border border-border/40 bg-muted/5 px-3 py-2"
-										>
-											<div className="flex items-center justify-between">
-												<div className="text-[10px] text-muted-foreground">
-													@{c.authorUsername}
-												</div>
-												<div className="text-[10px] text-muted-foreground">
-													{timeAgo(c.timestampMs)}
-												</div>
-											</div>
-											<div className="text-xs text-foreground/90 mt-1">
-												{c.text}
-											</div>
-										</div>
-									))}
-								</div>
-							)}
-						</div>
-					</div>
-
-					<div className="pt-3 border-t border-border/40">
-						<div className="relative flex items-center">
-							<Input
-								value={commentText}
-								onChange={(e) => setCommentText(e.target.value)}
-								placeholder="Write a comment…"
-								className="pr-8 h-9 text-xs bg-muted/10 border-transparent focus-visible:bg-muted/20 focus-visible:ring-0 placeholder:text-muted-foreground/50"
-								onKeyDown={(e) => {
-									if (e.key === "Enter" && !e.shiftKey) {
-										e.preventDefault();
-										void sendComment();
-									}
-								}}
-							/>
-							<Button
-								size="icon"
-								variant="ghost"
-								className="absolute right-1 h-6 w-6 rounded-full hover:bg-primary/10 hover:text-primary"
-								disabled={!commentText.trim() || isBusy || !commentThreadId}
-								onClick={() => void sendComment()}
-							>
-								<SendHorizontal className="h-3 w-3" />
-							</Button>
-						</div>
-					</div>
-				</div>
+				<SharedEventDetail
+					event={selectedEvent}
+					identity={identity}
+					friends={friends}
+					commentMessages={commentMessages}
+					commentText={commentText}
+					onCommentTextChange={setCommentText}
+					onSendComment={() => void sendComment()}
+					isBusy={isBusy}
+					commentError={commentError}
+					localEventPaths={localEventPaths}
+				/>
 			</div>
 		);
 	}
@@ -876,7 +772,7 @@ export function SocialTray() {
 							</div>
 						)}
 
-						<div className="flex items-center gap-2 mb-4 pb-2 border-b border-border/40">
+						<div className="flex items-center gap-2 mb-4 pb-1 border-b border-border/40">
 							<div className="flex-1 flex gap-3 overflow-x-auto scrollbar-hide">
 								{friends.map((friend) => {
 									const activity = latestActivityByUserId.get(friend.userId);
@@ -893,10 +789,10 @@ export function SocialTray() {
 							<Button
 								variant="ghost"
 								size="icon"
-								className="h-8 w-8 shrink-0 rounded-full hover:bg-muted/20"
+								className="size-6 items-center mr-0.5 justify-center shrink-0 rounded-full hover:bg-muted/20"
 								onClick={() => setView("add")}
 							>
-								<Plus className="h-4 w-4 text-muted-foreground" />
+								<Plus className="size-3 text-muted-foreground" />
 							</Button>
 						</div>
 
@@ -1015,21 +911,34 @@ export function SocialTray() {
 						transition={{ duration: 0.2 }}
 						className="absolute inset-0 flex flex-col"
 					>
-						<FriendProfile
-							friend={selectedFriend}
-							onBack={closeFriend}
-							dayWrapped={selectedDayWrapped}
-							daylineMode={daylineMode}
-							onCycleDaylineMode={cycleProfileMode}
-							selectedLabels={selectedLabels}
-							onLabelToggle={handleLabelToggle}
-							sharedEvents={feed.filter(
-								(e) => e.authorUserId === selectedFriend?.userId,
-							)}
-							onOpenEvent={openEvent}
-							replyText={replyText}
-							onReplyTextChange={setReplyText}
-						/>
+						{selectedFriend && (
+							<PersonView
+								friend={selectedFriend}
+								showBackHeader={!useExternalHeader}
+								onBack={closeFriend}
+								showIdentityRow={!useExternalHeader}
+								dayWrapped={selectedDayWrapped}
+								updatedLabel={selectedFriendUpdatedLabel}
+								slots={selectedFriendSlots}
+								daylineMode={daylineMode}
+								onCycleDaylineMode={cycleProfileMode}
+								selectedLabels={selectedLabels}
+								onLabelToggle={handleLabelToggle}
+								sharedEvents={feed.filter(
+									(e) => e.authorUserId === selectedFriend.userId,
+								)}
+								onOpenEvent={openEvent}
+								replyText={replyText}
+								onReplyTextChange={setReplyText}
+								renderEventCard={(event, onClick) => (
+									<SharedEventCard
+										key={event.id}
+										item={event}
+										onClick={onClick}
+									/>
+								)}
+							/>
+						)}
 					</motion.div>
 				)}
 			</AnimatePresence>
@@ -1094,13 +1003,15 @@ function SharedEventCard({
 		[item.category],
 	);
 
+	const backgroundItem = item.background?.[0];
+
 	return (
 		<button
 			type="button"
-			className="group relative w-full text-left overflow-hidden rounded-lg bg-muted/5 border border-border/40 hover:bg-muted/10 transition-all cursor-pointer"
+			className="group relative w-full text-left overflow-hidden rounded-xl bg-card border border-border/40 hover:border-primary/20 hover:shadow-sm transition-all duration-200 cursor-pointer"
 			onClick={onClick}
 		>
-			<div className="aspect-[2/1] w-full bg-muted/10 relative">
+			<div className="aspect-[16/9] w-full bg-muted/10 relative border-b border-border/40">
 				{imageSrc ? (
 					<img
 						src={imageSrc}
@@ -1114,203 +1025,97 @@ function SharedEventCard({
 						</div>
 					</div>
 				)}
+
+				{item.category && (
+					<div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 text-[9px] font-medium text-white/90 shadow-sm">
+						{item.category}
+					</div>
+				)}
 			</div>
 
-			<div className="p-3 space-y-2">
+			<div className="p-3 space-y-3">
 				<div className="flex items-center justify-between">
-					<div className="flex items-center gap-2">
+					<div className="flex items-center gap-2.5">
 						<div className="relative">
 							<AvatarDisplay
 								username={item.authorUsername}
-								size="xs"
+								size="sm"
 								isOwn={isOwnEvent}
 								ownAvatarUrl={ownAvatarUrl}
+								className=""
 							/>
 							<div
-								className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-background"
+								className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-background"
 								style={{ backgroundColor: indicatorColor }}
 							/>
 						</div>
-						<span className="text-xs font-medium text-foreground/90 truncate">
-							{isOwnEvent ? "You" : `@${item.authorUsername}`}
-						</span>
+						<div className="flex flex-col">
+							<span className="text-xs font-semibold text-foreground">
+								{isOwnEvent ? "You" : `@${item.authorUsername}`}
+							</span>
+							<span className="text-[10px] text-muted-foreground">
+								{timeAgo(item.timestampMs)}
+							</span>
+						</div>
 					</div>
-					{item.category && (
-						<span className="text-[10px] font-mono text-muted-foreground">
-							{item.category}
-						</span>
+
+					{item.appName && (
+						<div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground bg-muted/30 px-2 py-1 rounded-md border border-border/20">
+							<AppWindow className="h-3 w-3 opacity-70" />
+							{item.appName}
+						</div>
 					)}
 				</div>
 
-				{item.appName && (
-					<div className="text-xs text-foreground/90 truncate">
-						{item.appName}
+				{(item.caption ||
+					item.contentTitle ||
+					item.windowTitle ||
+					item.project) && (
+					<div className="space-y-1">
+						{item.project && (
+							<div className="text-[10px] font-mono uppercase tracking-wider text-primary/80">
+								{item.project}
+							</div>
+						)}
+						<div className="text-xs text-foreground/90 leading-relaxed font-medium">
+							{item.caption || item.contentTitle || item.windowTitle}
+						</div>
 					</div>
 				)}
 
-				{item.windowTitle && (
-					<div className="text-xs text-muted-foreground truncate">
-						{item.windowTitle}
+				{backgroundItem && (
+					<div className="mt-2 pt-2 border-t border-border/40">
+						<div className="flex items-center gap-2 group/bg">
+							{backgroundItem.imageUrl ? (
+								<img
+									src={backgroundItem.imageUrl}
+									alt={backgroundItem.title ?? ""}
+									className="h-8 w-8 rounded-md object-cover shadow-sm border border-border/20"
+								/>
+							) : (
+								<div className="h-8 w-8 rounded-md bg-muted/20 flex items-center justify-center border border-border/20">
+									<Music className="h-3.5 w-3.5 text-muted-foreground" />
+								</div>
+							)}
+							<div className="flex flex-col min-w-0">
+								{/* <div className="flex items-center gap-1.5">
+									<span className="text-[9px] uppercase tracking-wider text-muted-foreground/70 font-mono">
+										Listening to
+									</span>
+								</div> */}
+								<span className="text-xs font-medium text-foreground truncate">
+									{backgroundItem.title || "Unknown Track"}
+								</span>
+								{backgroundItem.subtitle && (
+									<span className="text-[10px] text-muted-foreground truncate font-mono uppercase">
+										{backgroundItem.subtitle}
+									</span>
+								)}
+							</div>
+						</div>
 					</div>
 				)}
 			</div>
 		</button>
-	);
-}
-
-function FriendProfile({
-	friend,
-	onBack,
-	dayWrapped,
-	daylineMode,
-	onCycleDaylineMode,
-	selectedLabels,
-	onLabelToggle,
-	sharedEvents,
-	onOpenEvent,
-	replyText,
-	onReplyTextChange,
-}: {
-	friend: Friend | null;
-	onBack: () => void;
-	dayWrapped: DayWrappedSnapshot | null;
-	daylineMode: DaylineViewMode;
-	onCycleDaylineMode: () => void;
-	selectedLabels: Set<string>;
-	onLabelToggle: (label: string) => void;
-	sharedEvents: SharedEvent[];
-	onOpenEvent: (event: SharedEvent) => void;
-	replyText: string;
-	onReplyTextChange: (value: string) => void;
-}) {
-	const slots = useMemo(
-		() => (dayWrapped ? toDaylineSlots(dayWrapped) : []),
-		[dayWrapped],
-	);
-
-	if (!friend) return <div />;
-
-	return (
-		<div className="flex flex-col h-full">
-			<div className="flex items-center pb-2 mb-2 border-b border-border/40">
-				<Button
-					variant="ghost"
-					size="icon"
-					className="h-6 w-6 -ml-2 rounded-full hover:bg-muted/20"
-					onClick={onBack}
-				>
-					<ChevronLeft className="h-4 w-4 text-muted-foreground" />
-				</Button>
-			</div>
-
-			<div className="flex-1 overflow-y-auto -mr-2 pr-2 custom-scrollbar">
-				<div className="flex items-center gap-3 mb-4 mt-1">
-					<AvatarDisplay
-						username={friend.username}
-						size="lg"
-						avatarSettings={friend.avatarSettings}
-					/>
-					<div className="flex flex-col min-w-0">
-						<div className="text-sm font-medium text-foreground truncate">
-							@{friend.username}
-						</div>
-						<div className="text-[10px] text-muted-foreground">
-							{dayWrapped
-								? `Updated ${timeAgo(dayWrapped.publishedAtMs)}`
-								: "No Day Wrapped yet"}
-						</div>
-					</div>
-				</div>
-
-				<div className="mb-6">
-					<div className="flex items-center justify-between mb-3 px-1">
-						<div className="text-[10px] font-mono tracking-[0.2em] text-muted-foreground">
-							DAY WRAPPED
-						</div>
-						{dayWrapped && (
-							<Button
-								variant="ghost"
-								size="icon"
-								className="h-6 w-6 rounded-full hover:bg-muted/20"
-								onClick={onCycleDaylineMode}
-							>
-								{daylineMode === "categories" && (
-									<Activity className="h-3 w-3 text-muted-foreground" />
-								)}
-								{daylineMode === "apps" && (
-									<AppWindow className="h-3 w-3 text-muted-foreground" />
-								)}
-								{daylineMode === "addiction" && (
-									<Flame className="h-3 w-3 text-muted-foreground" />
-								)}
-							</Button>
-						)}
-					</div>
-
-					{dayWrapped ? (
-						<>
-							<Dayline
-								slots={slots}
-								mode={daylineMode}
-								selectedLabels={selectedLabels}
-							/>
-							<DaylineTimeMarkers
-								slots={slots}
-								mode={daylineMode}
-								selectedLabels={selectedLabels}
-							/>
-							<DayWrappedLegend
-								slots={slots}
-								mode={daylineMode}
-								selectedLabels={selectedLabels}
-								onLabelToggle={onLabelToggle}
-							/>
-						</>
-					) : (
-						<div className="text-xs text-muted-foreground text-center py-6">
-							Waiting for an update…
-						</div>
-					)}
-				</div>
-
-				<div className="space-y-3 mb-6">
-					<div className="text-[10px] font-mono tracking-[0.2em] text-muted-foreground px-1">
-						ACTIVITY
-					</div>
-					{sharedEvents.length === 0 ? (
-						<div className="text-xs text-muted-foreground text-center py-4">
-							No recent activity
-						</div>
-					) : (
-						sharedEvents.map((item) => (
-							<SharedEventCard
-								key={item.id}
-								item={item}
-								onClick={() => onOpenEvent(item)}
-							/>
-						))
-					)}
-				</div>
-			</div>
-
-			<div className="pt-3 border-t border-border/40">
-				<div className="relative flex items-center">
-					<Input
-						value={replyText}
-						onChange={(e) => onReplyTextChange(e.target.value)}
-						placeholder={`Reply to @${friend.username}...`}
-						className="pr-8 h-9 text-xs bg-muted/10 border-transparent focus-visible:bg-muted/20 focus-visible:ring-0 placeholder:text-muted-foreground/50"
-					/>
-					<Button
-						size="icon"
-						variant="ghost"
-						className="absolute right-1 h-6 w-6 rounded-full hover:bg-primary/10 hover:text-primary"
-						disabled={!replyText.trim()}
-					>
-						<SendHorizontal className="h-3 w-3" />
-					</Button>
-				</div>
-			</div>
-		</div>
 	);
 }

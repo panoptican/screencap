@@ -844,6 +844,10 @@ declare global {
 					since?: number,
 				) => Promise<ChatMessage[]>;
 				sendMessage: (threadId: string, text: string) => Promise<void>;
+				markThreadRead: (
+					threadId: string,
+					lastReadTimestampMs?: number,
+				) => Promise<void>;
 			};
 			rooms: {
 				ensureProjectRoom: (projectName: string) => Promise<string>;
@@ -905,6 +909,7 @@ declare global {
 					| "events:changed"
 					| "projects:normalized"
 					| "update:state"
+					| "popup:reset-to-personal"
 					| "shortcut:capture-now"
 					| "shortcut:capture-project-progress-preview"
 					| "shortcut:capture-project-progress"

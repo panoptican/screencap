@@ -326,7 +326,7 @@ export function DayWrappedLegend({
 	const showIntensity = mode !== "apps";
 
 	return (
-		<div className="mt-4 flex flex-wrap gap-x-4 gap-y-3">
+		<div className="mt-4 flex flex-wrap gap-x-4 gap-y-3 min-h-7">
 			{showIntensity && (
 				<div className="flex gap-2 items-center text-xs text-muted-foreground">
 					<div className="font-mono text-[10px] tracking-[0.18em]">

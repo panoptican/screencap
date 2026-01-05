@@ -11,6 +11,7 @@ import { destroyMainWindow, showMainWindow } from "./window";
 let tray: Tray | null = null;
 let trayMenu: Menu | null = null;
 let quitCallback: (() => void) | null = null;
+let unreadCount = 0;
 
 const logger = createLogger({ scope: "Tray" });
 
@@ -41,6 +42,21 @@ function createTrayIcon(): Electron.NativeImage {
 	});
 
 	return icon;
+}
+
+export function setTrayUnreadCount(count: number): void {
+	unreadCount = Math.max(0, Math.trunc(count));
+	if (!tray || tray.isDestroyed()) return;
+	try {
+		// Keep a single indicator. On macOS use the title (right of icon) for
+		// `• N` like Cursor; on other platforms we keep just the normal icon.
+		tray.setImage(createTrayIcon());
+		if (process.platform === "darwin") {
+			tray.setTitle(unreadCount > 0 ? `• ${unreadCount}` : "");
+		}
+	} catch (error) {
+		logger.warn("Failed to update tray icon", { error: String(error) });
+	}
 }
 
 function updateTrayMenu(isPaused: boolean): void {
@@ -84,6 +100,9 @@ export function createTray(onQuit: () => void): Tray {
 		icon?.isEmpty()
 	) {
 		tray.setTitle("SC");
+	}
+	if (process.platform === "darwin" && unreadCount > 0) {
+		tray.setTitle(`• ${unreadCount}`);
 	}
 
 	logger.info("Tray created", { platform: process.platform });

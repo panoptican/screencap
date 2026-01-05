@@ -8,6 +8,8 @@ import {
 	openProjectThread,
 	sendMessage,
 } from "../../features/chat/ChatService";
+import { clearUnreadForThread } from "../../features/socialFeed/UnreadCommentState";
+import { upsertChatLastReadTimestampMs } from "../../infra/db/repositories/ChatUnreadStateRepository";
 import { secureHandle } from "../secure";
 
 const noArgs = z.tuple([]);
@@ -20,6 +22,10 @@ const fetchMessagesArgs = z.union([
 const sendMessageArgs = z.tuple([
 	z.string().trim().min(1).max(256),
 	z.string().max(10_000),
+]);
+const markThreadReadArgs = z.union([
+	z.tuple([z.string().trim().min(1).max(256)]),
+	z.tuple([z.string().trim().min(1).max(256), z.number().int()]),
 ]);
 
 export function registerChatHandlers(): void {
@@ -60,6 +66,19 @@ export function registerChatHandlers(): void {
 		sendMessageArgs,
 		async (threadId: string, text: string): Promise<void> => {
 			await sendMessage({ threadId, text });
+		},
+	);
+
+	secureHandle(
+		IpcChannels.Chat.MarkThreadRead,
+		markThreadReadArgs,
+		async (threadId: string, lastReadTimestampMs?: number): Promise<void> => {
+			upsertChatLastReadTimestampMs({
+				threadId,
+				lastReadTimestampMs: lastReadTimestampMs ?? Date.now(),
+				updatedAt: Date.now(),
+			});
+			clearUnreadForThread(threadId);
 		},
 	);
 }

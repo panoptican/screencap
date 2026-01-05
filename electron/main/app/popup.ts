@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { BrowserWindow, type Rectangle, screen } from "electron";
+import { IpcEvents } from "../../shared/ipc";
 import {
 	addTrustedWebContentsId,
 	removeTrustedWebContentsId,
@@ -13,15 +14,24 @@ const POPUP_DEFAULT_HEIGHT = 330;
 const POPUP_MIN_HEIGHT = 240;
 const POPUP_MAX_HEIGHT = 1200;
 const POPUP_MARGIN = 8;
+const POPUP_VIEW_RESET_IDLE_MS = 60_000;
 
 let popupHeight = POPUP_DEFAULT_HEIGHT;
 let lastAnchor: Rectangle | undefined;
 let userMoved = false;
 let userPosition: { x: number; y: number } | null = null;
 let isProgrammaticMove = false;
+let resetViewTimeout: ReturnType<typeof setTimeout> | null = null;
 
 function clamp(value: number, min: number, max: number): number {
 	return Math.min(Math.max(value, min), max);
+}
+
+function ensureMacPopupOverlay(): void {
+	if (!popupWindow || popupWindow.isDestroyed()) return;
+	if (process.platform !== "darwin") return;
+	popupWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+	popupWindow.setAlwaysOnTop(true, "pop-up-menu");
 }
 
 function displayForPopup(anchor?: Rectangle) {
@@ -73,6 +83,29 @@ function setPopupBounds(bounds: Rectangle): void {
 	}
 }
 
+function clearResetViewTimeout(): void {
+	if (!resetViewTimeout) return;
+	clearTimeout(resetViewTimeout);
+	resetViewTimeout = null;
+}
+
+function scheduleResetViewToPersonal(): void {
+	clearResetViewTimeout();
+	resetViewTimeout = setTimeout(() => {
+		resetViewTimeout = null;
+		if (!popupWindow || popupWindow.isDestroyed()) return;
+		if (popupWindow.isVisible()) return;
+		popupWindow.webContents.send(IpcEvents.PopupResetToPersonal);
+	}, POPUP_VIEW_RESET_IDLE_MS);
+}
+
+function showPopupInactive(): void {
+	if (!popupWindow || popupWindow.isDestroyed()) return;
+	ensureMacPopupOverlay();
+	popupWindow.showInactive();
+	popupWindow.moveTop();
+}
+
 function positionPopupWindow(anchor?: Rectangle): void {
 	if (!popupWindow || popupWindow.isDestroyed()) return;
 	const { x, y } = computePopupPosition(anchor);
@@ -105,6 +138,7 @@ export function createPopupWindow(anchor?: Rectangle): BrowserWindow {
 		movable: true,
 		minimizable: false,
 		maximizable: false,
+		fullscreenable: false,
 		closable: true,
 		alwaysOnTop: true,
 		skipTaskbar: true,
@@ -146,6 +180,7 @@ export function createPopupWindow(anchor?: Rectangle): BrowserWindow {
 
 	popupWindow.on("closed", () => {
 		removeTrustedWebContentsId(webContentsId);
+		clearResetViewTimeout();
 		popupWindow = null;
 		userMoved = false;
 		userPosition = null;
@@ -160,7 +195,8 @@ export function createPopupWindow(anchor?: Rectangle): BrowserWindow {
 			pendingShow = null;
 			positionPopupWindow(anchor);
 			if (popupWindow && !popupWindow.isDestroyed()) {
-				popupWindow.showInactive();
+				clearResetViewTimeout();
+				showPopupInactive();
 			}
 		}
 	});
@@ -196,12 +232,14 @@ export function showPopupWindow(anchor?: Rectangle): void {
 		return;
 	}
 	positionPopupWindow(anchor);
-	popupWindow.showInactive();
+	clearResetViewTimeout();
+	showPopupInactive();
 }
 
 export function hidePopupWindow(): void {
 	if (!popupWindow || popupWindow.isDestroyed()) return;
 	popupWindow.hide();
+	scheduleResetViewToPersonal();
 }
 
 export function togglePopupWindow(anchor?: Rectangle): void {
@@ -213,7 +251,7 @@ export function togglePopupWindow(anchor?: Rectangle): void {
 	}
 
 	if (popupWindow.isVisible()) {
-		popupWindow.hide();
+		hidePopupWindow();
 		return;
 	}
 
@@ -223,7 +261,8 @@ export function togglePopupWindow(anchor?: Rectangle): void {
 	}
 
 	positionPopupWindow(anchor);
-	popupWindow.showInactive();
+	clearResetViewTimeout();
+	showPopupInactive();
 }
 
 export function destroyPopupWindow(): void {
@@ -231,6 +270,7 @@ export function destroyPopupWindow(): void {
 		popupWindow = null;
 		return;
 	}
+	clearResetViewTimeout();
 	popupWindow.destroy();
 	popupWindow = null;
 }

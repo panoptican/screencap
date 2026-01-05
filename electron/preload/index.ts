@@ -360,6 +360,19 @@ const api = {
 		},
 		sendMessage: (threadId: string, text: string): Promise<void> =>
 			ipcRenderer.invoke(IpcChannels.Chat.SendMessage, threadId, text),
+		markThreadRead: (
+			threadId: string,
+			lastReadTimestampMs?: number,
+		): Promise<void> => {
+			if (lastReadTimestampMs !== undefined) {
+				return ipcRenderer.invoke(
+					IpcChannels.Chat.MarkThreadRead,
+					threadId,
+					lastReadTimestampMs,
+				);
+			}
+			return ipcRenderer.invoke(IpcChannels.Chat.MarkThreadRead, threadId);
+		},
 	},
 
 	rooms: {

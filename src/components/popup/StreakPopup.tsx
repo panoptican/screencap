@@ -22,7 +22,8 @@ import {
 import { ShortcutKbd } from "@/components/ui/shortcut-kbd";
 import { useSettings } from "@/hooks/useSettings";
 import { computeDaylineSlots, SLOTS_PER_HOUR } from "@/lib/dayline";
-import type { Event } from "@/types";
+import type { Event, SharedEvent } from "@/types";
+import { AvatarDisplay } from "./AvatarDisplay";
 import {
 	Dayline,
 	DaylineTimeMarkers,
@@ -30,7 +31,7 @@ import {
 	DayWrappedLegend,
 	VIEW_MODE_ORDER,
 } from "./Dayline";
-import { SocialTray } from "./SocialTray";
+import { SocialTray, type SocialTrayTopHeaderState } from "./SocialTray";
 import { useLockBodyScroll } from "./useLockBodyScroll";
 import { usePopupAutoHeight } from "./usePopupAutoHeight";
 
@@ -43,6 +44,10 @@ export function StreakPopup() {
 	const [view, setView] = useState<"day" | "social">("day");
 	const [day, setDay] = useState(() => startOfDay(new Date()));
 	const { settings } = useSettings();
+	const [socialSelectedEvent, setSocialSelectedEvent] =
+		useState<SharedEvent | null>(null);
+	const [socialTopHeader, setSocialTopHeader] =
+		useState<SocialTrayTopHeaderState | null>(null);
 
 	const handleLabelToggle = useCallback((label: string) => {
 		setSelectedLabels((prev) => {
@@ -59,6 +64,12 @@ export function StreakPopup() {
 	useEffect(() => {
 		setSelectedLabels(new Set());
 	}, []);
+
+	useEffect(() => {
+		if (view !== "social" && socialSelectedEvent) {
+			setSocialSelectedEvent(null);
+		}
+	}, [socialSelectedEvent, view]);
 	const todayStartMs = useMemo(() => startOfDay(new Date()).getTime(), []);
 	const dayStartMs = useMemo(() => startOfDay(day).getTime(), [day]);
 	const dayEndMs = useMemo(() => endOfDay(day).getTime(), [day]);
@@ -126,6 +137,13 @@ export function StreakPopup() {
 		});
 	}, [triggerCaptureNow]);
 
+	useEffect(() => {
+		if (!window.api) return;
+		return window.api.on("popup:reset-to-personal", () => {
+			setView("day");
+		});
+	}, []);
+
 	return (
 		<div
 			ref={rootRef}
@@ -165,9 +183,40 @@ export function StreakPopup() {
 
 			<div className="flex items-center justify-between pr-0.5">
 				<div className="flex items-center gap-1.5">
-					<div className="font-mono text-[10px] tracking-[0.28em] text-muted-foreground">
-						{view === "day" ? "DAY WRAPPED" : "FEED"}
-					</div>
+					{view === "social" && socialTopHeader ? (
+						<div className="flex items-center gap-1 min-w-0">
+							<button
+								type="button"
+								aria-label="Back"
+								className="inline-flex size-4 items-center mr-1 justify-center rounded-md border border-border bg-background/30 text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground shrink-0"
+								onClick={() => socialTopHeader.onBack()}
+							>
+								<ChevronLeft className="size-2" />
+							</button>
+							<AvatarDisplay
+								username={socialTopHeader.username}
+								size="xs"
+								isOwn={
+									socialTopHeader.kind === "event"
+										? socialTopHeader.isOwn
+										: undefined
+								}
+								ownAvatarUrl={
+									socialTopHeader.kind === "event"
+										? socialTopHeader.ownAvatarUrl
+										: undefined
+								}
+								avatarSettings={socialTopHeader.avatarSettings}
+							/>
+							<div className="text-xs font-medium text-foreground/90 truncate">
+								{socialTopHeader.username}
+							</div>
+						</div>
+					) : (
+						<div className="font-mono text-[10px] tracking-[0.28em] text-muted-foreground">
+							{view === "day" ? "DAY WRAPPED" : "FEED"}
+						</div>
+					)}
 					{view === "day" && (
 						<>
 							<button
@@ -351,10 +400,15 @@ export function StreakPopup() {
 				</div>
 			</div>
 			<div
-				className="mt-4"
+				className="mt-2"
 				style={{ display: view === "social" ? "block" : "none" }}
 			>
-				<SocialTray />
+				<SocialTray
+					selectedEvent={socialSelectedEvent}
+					onSelectedEventChange={setSocialSelectedEvent}
+					onTopHeaderChange={setSocialTopHeader}
+					useExternalHeader
+				/>
 			</div>
 		</div>
 	);
