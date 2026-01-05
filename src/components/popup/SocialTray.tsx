@@ -969,6 +969,7 @@ function FriendAvatarItem({
 	return (
 		<button type="button" onClick={onClick} className="relative shrink-0">
 			<AvatarDisplay
+				userId={friend.userId}
 				username={friend.username}
 				size="md"
 				avatarSettings={friend.avatarSettings}
@@ -1038,6 +1039,7 @@ function SharedEventCard({
 					<div className="flex items-center gap-2.5">
 						<div className="relative">
 							<AvatarDisplay
+								userId={item.authorUserId}
 								username={item.authorUsername}
 								size="sm"
 								isOwn={isOwnEvent}

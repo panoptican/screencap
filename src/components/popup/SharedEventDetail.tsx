@@ -317,7 +317,11 @@ export function SharedEventDetail({
 							<div className="divide-y divide-border/30">
 								{parsedComments.map((c) => (
 									<div key={c.id} className="py-3 flex gap-2">
-										<AvatarDisplay username={c.authorUsername} size="xs" />
+										<AvatarDisplay
+											userId={c.authorUserId}
+											username={c.authorUsername}
+											size="xs"
+										/>
 										<div className="min-w-0 flex-1">
 											<div className="flex items-center justify-between gap-2">
 												<div className="text-xs font-semibold text-foreground truncate">

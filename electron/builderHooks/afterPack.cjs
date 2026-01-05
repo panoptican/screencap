@@ -1,25 +1,6 @@
 const { execSync } = require("node:child_process");
+const { existsSync } = require("node:fs");
 const { join } = require("node:path");
-const { readdirSync } = require("node:fs");
-
-function findBinaries(dir, binaries = []) {
-	const entries = readdirSync(dir, { withFileTypes: true });
-	for (const entry of entries) {
-		const fullPath = join(dir, entry.name);
-		if (entry.isDirectory()) {
-			if (!entry.name.endsWith(".app")) {
-				findBinaries(fullPath, binaries);
-			}
-		} else if (
-			entry.name.endsWith(".node") ||
-			entry.name.endsWith(".dylib") ||
-			entry.name === "screencap-ocr"
-		) {
-			binaries.push(fullPath);
-		}
-	}
-	return binaries;
-}
 
 module.exports = async (context) => {
 	if (process.platform !== "darwin") return;
@@ -28,34 +9,38 @@ module.exports = async (context) => {
 		context.appOutDir,
 		`${context.packager.appInfo.productFilename}.app`,
 	);
+	const ocrBinary = join(appPath, "Contents", "Resources", "ocr", "screencap-ocr");
 
-	console.log(`Ad-hoc signing ${appPath}...`);
-
-	const binaries = findBinaries(appPath);
-	console.log(`Found ${binaries.length} native binaries to sign`);
-
-	for (const binary of binaries) {
-		try {
-			execSync(`codesign --force --sign - "${binary}"`, { stdio: "pipe" });
-		} catch (_e) {
-			console.log(`Warning: Could not sign ${binary}`);
-		}
+	if (!existsSync(ocrBinary)) {
+		console.log("OCR binary not found, skipping");
+		return;
 	}
 
-	execSync(`codesign --force --deep --sign - "${appPath}"`, {
-		stdio: "inherit",
-	});
+	const identity = process.env.CSC_NAME || findDeveloperIdIdentity();
+	if (!identity) {
+		console.log("No Developer ID found, OCR binary will remain unsigned");
+		return;
+	}
 
-	const result = execSync(
-		`codesign --verify --deep --strict "${appPath}" 2>&1 || true`,
-		{ encoding: "utf-8" },
+	const entitlements = join(context.packager.projectDir, "build", "entitlements.mac.plist");
+
+	console.log(`Signing OCR binary with: ${identity}`);
+	execSync(
+		`codesign --force --options runtime --sign "${identity}" --entitlements "${entitlements}" "${ocrBinary}"`,
+		{ stdio: "inherit" },
 	);
-
-	if (result.includes("valid on disk")) {
-		console.log("Ad-hoc signing verified successfully");
-	} else if (result.trim() === "") {
-		console.log("Ad-hoc signing verified successfully");
-	} else {
-		console.log("Signature verification output:", result);
-	}
 };
+
+function findDeveloperIdIdentity() {
+	if (process.env.CSC_IDENTITY_AUTO_DISCOVERY === "false") return null;
+	try {
+		const output = execSync(
+			'security find-identity -v -p codesigning | grep "Developer ID Application" | head -1',
+			{ encoding: "utf8" },
+		);
+		const match = output.match(/"([^"]+)"/);
+		return match ? match[1] : null;
+	} catch {
+		return null;
+	}
+}

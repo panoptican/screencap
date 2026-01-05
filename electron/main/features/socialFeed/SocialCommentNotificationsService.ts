@@ -138,6 +138,7 @@ function showNotification(params: { title: string; body: string }): void {
 		const n = new Notification({
 			title: params.title,
 			body: params.body,
+			silent: process.platform === "darwin",
 		});
 		n.show();
 	} catch (error) {

@@ -550,17 +550,13 @@ export interface SocialIdentity {
 	username: string;
 }
 
-export type AvatarPattern =
-	| "letter"
-	| "letterBold"
-	| "letterMonospace"
-	| "pixelLetter"
-	| "ascii";
+export type AvatarPattern = "ascii";
 
 export interface AvatarSettings {
 	pattern: AvatarPattern;
 	backgroundColor: string;
 	foregroundColor: string;
+	asciiChar: string;
 }
 
 export interface Friend {

@@ -5,13 +5,35 @@ This document describes how to validate the auto-update flow end-to-end.
 ## Prerequisites
 
 1. GitHub repository with secrets configured:
-   - `APPLE_CERT_P12_BASE64` - Base64-encoded .p12 certificate
+   - `APPLE_CERT_P12_BASE64` - Base64-encoded .p12 certificate (Developer ID Application)
    - `APPLE_CERT_P12_PASSWORD` - Certificate password
    - `APPLE_ID` - Apple ID email
    - `APPLE_APP_SPECIFIC_PASSWORD` - App-specific password for notarization
-   - `APPLE_TEAM_ID` - Apple Developer Team ID
+   - `APPLE_TEAM_ID` - Apple Developer Team ID (e.g., `ZY8VMC3J6G`)
 
 2. At least two releases published to GitHub Releases
+
+## Local Signed Build
+
+To build a signed and notarized app locally:
+
+```bash
+# Set environment variables
+export APPLE_TEAM_ID="ZY8VMC3J6G"
+export APPLE_ID="your-apple-id@email.com"
+export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"
+
+# Build
+npm run build
+npx electron-builder --config electron-builder.yml
+```
+
+The certificate is auto-discovered from your Keychain. Verify signing:
+
+```bash
+codesign --verify --deep --strict dist/mac-arm64/Screencap.app
+spctl --assess --type execute dist/mac-arm64/Screencap.app
+```
 
 ## Two-Release Upgrade Test
 

@@ -5,6 +5,7 @@ import {
 	sign,
 } from "node:crypto";
 import type { BodyInit } from "undici-types";
+import type { AvatarSettings } from "../../../shared/types";
 import { createLogger } from "../../infra/log";
 import { getSocialApiBaseUrl } from "./config";
 import {
@@ -197,11 +198,9 @@ export async function signedFetch(
 	});
 }
 
-export async function syncAvatarSettings(avatarSettings: {
-	pattern: string;
-	backgroundColor: string;
-	foregroundColor: string;
-}): Promise<void> {
+export async function syncAvatarSettings(
+	avatarSettings: AvatarSettings,
+): Promise<void> {
 	const res = await signedFetch("/api/me", {
 		method: "PATCH",
 		headers: { "Content-Type": "application/json" },

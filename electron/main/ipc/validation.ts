@@ -285,15 +285,16 @@ const zSocialSharingSettings = z
 
 const zAvatarSettings = z
 	.object({
-		pattern: z.enum([
-			"letter",
-			"letterBold",
-			"letterMonospace",
-			"pixelLetter",
-			"ascii",
-		]),
+		pattern: z.literal("ascii"),
 		backgroundColor: z.string().max(100),
 		foregroundColor: z.string().max(100),
+		asciiChar: z
+			.string()
+			.trim()
+			.min(1)
+			.max(1)
+			.regex(/^[\x21-\x7E]$/)
+			.default("@"),
 	})
 	.strict();
 

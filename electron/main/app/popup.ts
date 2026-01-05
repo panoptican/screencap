@@ -31,7 +31,8 @@ function ensureMacPopupOverlay(): void {
 	if (!popupWindow || popupWindow.isDestroyed()) return;
 	if (process.platform !== "darwin") return;
 	popupWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-	popupWindow.setAlwaysOnTop(true, "pop-up-menu");
+	// Use relativeLevel 1 to ensure popup appears above fullscreen apps
+	popupWindow.setAlwaysOnTop(true, "pop-up-menu", 1);
 }
 
 function displayForPopup(anchor?: Rectangle) {
@@ -156,7 +157,8 @@ export function createPopupWindow(anchor?: Rectangle): BrowserWindow {
 
 	if (process.platform === "darwin") {
 		popupWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-		popupWindow.setAlwaysOnTop(true, "pop-up-menu");
+		// Use relativeLevel 1 to ensure popup appears above fullscreen apps
+		popupWindow.setAlwaysOnTop(true, "pop-up-menu", 1);
 	}
 
 	const webContentsId = popupWindow.webContents.id;
@@ -175,7 +177,7 @@ export function createPopupWindow(anchor?: Rectangle): BrowserWindow {
 			if (!popupWindow || popupWindow.isDestroyed()) return;
 			if (popupWindow.isFocused()) return;
 			hidePopupWindow();
-		}, 0);
+		}, 100);
 	});
 
 	popupWindow.on("closed", () => {

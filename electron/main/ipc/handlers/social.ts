@@ -25,15 +25,16 @@ const usernameArg = z.tuple([z.string().trim().min(3).max(32)]);
 const idArg = z.tuple([z.string().trim().min(1).max(256)]);
 const avatarSettingsArg = z.tuple([
 	z.object({
-		pattern: z.enum([
-			"letter",
-			"letterBold",
-			"letterMonospace",
-			"pixelLetter",
-			"ascii",
-		]),
+		pattern: z.literal("ascii"),
 		backgroundColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
 		foregroundColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+		asciiChar: z
+			.string()
+			.trim()
+			.min(1)
+			.max(1)
+			.regex(/^[\x21-\x7E]$/)
+			.default("@"),
 	}),
 ]);
 

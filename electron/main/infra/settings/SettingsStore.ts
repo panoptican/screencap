@@ -41,9 +41,10 @@ const DEFAULT_SETTINGS: Settings = {
 		},
 	},
 	avatar: {
-		pattern: "pixelLetter",
+		pattern: "ascii",
 		backgroundColor: "#0a0a0a",
 		foregroundColor: "#ffffff",
+		asciiChar: "@",
 	},
 	llmEnabled: true,
 	allowVisionUploads: true,
@@ -145,9 +146,7 @@ const zSocialSharingSettings = z
 
 const zAvatarSettings = z
 	.object({
-		pattern: z
-			.enum(["letter", "letterBold", "letterMonospace", "pixelLetter", "ascii"])
-			.catch(DEFAULT_SETTINGS.avatar.pattern),
+		pattern: z.enum(["ascii"]).catch(DEFAULT_SETTINGS.avatar.pattern),
 		backgroundColor: z
 			.string()
 			.max(100)
@@ -156,6 +155,13 @@ const zAvatarSettings = z
 			.string()
 			.max(100)
 			.catch(DEFAULT_SETTINGS.avatar.foregroundColor),
+		asciiChar: z
+			.string()
+			.trim()
+			.min(1)
+			.max(1)
+			.regex(/^[\x21-\x7E]$/)
+			.catch(DEFAULT_SETTINGS.avatar.asciiChar),
 	})
 	.strip()
 	.catch(DEFAULT_SETTINGS.avatar);

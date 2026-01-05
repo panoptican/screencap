@@ -130,10 +130,11 @@ export function ProgressCard({
 								{event.authorUsername && (
 									<div className="absolute top-2 left-2">
 										<AuthorAvatar
+											userId={event.authorUserId}
 											username={event.authorUsername}
 											isMe={isMe}
 											size="md"
-											avatarSettings={avatarSettings}
+											avatarSettings={isMe ? avatarSettings : undefined}
 										/>
 									</div>
 								)}

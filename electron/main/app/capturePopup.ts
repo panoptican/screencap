@@ -131,7 +131,8 @@ export function createCapturePopupWindow(anchor?: Rectangle): BrowserWindow {
 		capturePopupWindow.setVisibleOnAllWorkspaces(true, {
 			visibleOnFullScreen: true,
 		});
-		capturePopupWindow.setAlwaysOnTop(true, "pop-up-menu");
+		// Use relativeLevel 1 to ensure popup appears above fullscreen apps
+		capturePopupWindow.setAlwaysOnTop(true, "pop-up-menu", 1);
 	}
 
 	const webContentsId = capturePopupWindow.webContents.id;

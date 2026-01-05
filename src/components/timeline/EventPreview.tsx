@@ -748,7 +748,10 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 							<div className="space-y-4">
 								{isSharedFromOther && (
 									<div className="flex items-center gap-3 p-4 rounded-2xl bg-muted/10">
-										<AuthorAvatar username={event.authorUsername!} />
+										<AuthorAvatar
+											userId={event.authorUserId}
+											username={event.authorUsername!}
+										/>
 										<div className="min-w-0">
 											<div className="text-[10px] font-mono tracking-[0.2em] text-muted-foreground uppercase">
 												Shared by

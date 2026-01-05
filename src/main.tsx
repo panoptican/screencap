@@ -4,6 +4,7 @@ import App from "./App";
 import { FpsGuard } from "./components/performance/FpsGuard";
 import { ProjectProgressCapturePopup } from "./components/popup/ProjectProgressCapturePopup";
 import { StreakPopup } from "./components/popup/StreakPopup";
+import { useSocialDirectoryBootstrap } from "./hooks/useSocialDirectoryBootstrap";
 import { initRendererLogCapture } from "./lib/rendererLogBuffer";
 import "./styles/globals.css";
 
@@ -19,16 +20,21 @@ const popupKind =
 			: null;
 
 try {
+	function Root() {
+		useSocialDirectoryBootstrap();
+		return popupKind === "streak" ? (
+			<StreakPopup />
+		) : popupKind === "capture" ? (
+			<ProjectProgressCapturePopup />
+		) : (
+			<App />
+		);
+	}
+
 	ReactDOM.createRoot(rootElement).render(
 		<React.StrictMode>
 			<FpsGuard />
-			{popupKind === "streak" ? (
-				<StreakPopup />
-			) : popupKind === "capture" ? (
-				<ProjectProgressCapturePopup />
-			) : (
-				<App />
-			)}
+			<Root />
 		</React.StrictMode>,
 	);
 } catch (error) {

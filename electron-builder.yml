@@ -24,8 +24,11 @@ asarUnpack:
   - node_modules/sharp/**/*
   - node_modules/better-sqlite3/**/*
 mac:
-  identity: null
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
+  notarize: true
   extendInfo:
     NSScreenCaptureUsageDescription: Screencap needs screen recording permission to capture screenshots for activity tracking.
   target:
@@ -46,10 +49,6 @@ dmg:
       y: 220
       type: link
       path: /Applications
-    - x: 130
-      y: 420
-      type: file
-      path: build/install.command
 publish:
   provider: github
   owner: yahorbarkouski

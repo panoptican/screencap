@@ -1,4 +1,4 @@
-import type { AvatarPattern, AvatarSettings } from "@/types";
+import type { AvatarSettings } from "@/types";
 
 const LETTER_PATTERNS: Record<string, string[]> = {
 	A: ["  █  ", " █ █ ", "█████", "█   █", "█   █"],
@@ -29,15 +29,11 @@ const LETTER_PATTERNS: Record<string, string[]> = {
 	Z: ["█████", "   █ ", "  █  ", " █   ", "█████"],
 };
 
-const ASCII_S_PATTERN = [
-	"  ████  ",
-	" █    █ ",
-	" █      ",
-	"  ████  ",
-	"      █ ",
-	" █    █ ",
-	"  ████  ",
-];
+function sanitizeAsciiChar(value: string | undefined): string {
+	const first = (value ?? "@").slice(0, 1);
+	if (!first.trim()) return "@";
+	return first;
+}
 
 export const DEFAULT_AVATAR_COLORS = [
 	"#0a0a0a",
@@ -76,9 +72,10 @@ export const DEFAULT_FOREGROUND_COLORS = [
 
 export function getDefaultAvatarSettings(): AvatarSettings {
 	return {
-		pattern: "pixelLetter",
+		pattern: "ascii",
 		backgroundColor: "#0a0a0a",
 		foregroundColor: "#ffffff",
+		asciiChar: "@",
 	};
 }
 
@@ -104,116 +101,40 @@ function drawRoundedRect(
 	ctx.closePath();
 }
 
-function generateLetterAvatar(
+function generateAsciiAvatar(
 	ctx: CanvasRenderingContext2D,
 	letter: string,
 	size: number,
 	settings: AvatarSettings,
 ) {
-	const fontSize = size * 0.5;
-	ctx.font = `600 ${fontSize}px "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif`;
-	ctx.textAlign = "center";
-	ctx.textBaseline = "middle";
-	ctx.fillStyle = settings.foregroundColor;
-	ctx.fillText(letter.toUpperCase(), size / 2, size / 2 + fontSize * 0.05);
-}
-
-function generateLetterBoldAvatar(
-	ctx: CanvasRenderingContext2D,
-	letter: string,
-	size: number,
-	settings: AvatarSettings,
-) {
-	const fontSize = size * 0.55;
-	ctx.font = `800 ${fontSize}px "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif`;
-	ctx.textAlign = "center";
-	ctx.textBaseline = "middle";
-	ctx.fillStyle = settings.foregroundColor;
-	ctx.fillText(letter.toUpperCase(), size / 2, size / 2 + fontSize * 0.05);
-}
-
-function generateMonospaceAvatar(
-	ctx: CanvasRenderingContext2D,
-	letter: string,
-	size: number,
-	settings: AvatarSettings,
-) {
-	const fontSize = size * 0.5;
-	ctx.font = `600 ${fontSize}px "SF Mono", "Monaco", "Menlo", monospace`;
-	ctx.textAlign = "center";
-	ctx.textBaseline = "middle";
-	ctx.fillStyle = settings.foregroundColor;
-	ctx.fillText(letter.toUpperCase(), size / 2, size / 2 + fontSize * 0.05);
-}
-
-function generatePixelLetterAvatar(
-	ctx: CanvasRenderingContext2D,
-	letter: string,
-	size: number,
-	settings: AvatarSettings,
-) {
+	const glyph = sanitizeAsciiChar(settings.asciiChar);
 	const pattern = LETTER_PATTERNS[letter.toUpperCase()] ?? LETTER_PATTERNS.A;
 	const rows = pattern.length;
 	const cols = Math.max(...pattern.map((r) => r.length));
 
-	const padding = size * 0.2;
+	const padding = size * 0.18;
 	const availableSize = size - padding * 2;
 	const cellSize = Math.floor(availableSize / Math.max(rows, cols));
+	if (cellSize <= 0) return;
 
 	const totalWidth = cols * cellSize;
 	const totalHeight = rows * cellSize;
 	const offsetX = (size - totalWidth) / 2;
 	const offsetY = (size - totalHeight) / 2;
 
+	const fontSize = cellSize * 1.15;
+	ctx.font = `900 ${fontSize}px "SF Mono", "Monaco", "Menlo", monospace`;
+	ctx.textAlign = "center";
+	ctx.textBaseline = "middle";
 	ctx.fillStyle = settings.foregroundColor;
 
 	for (let row = 0; row < rows; row++) {
 		for (let col = 0; col < pattern[row].length; col++) {
 			if (pattern[row][col] === "█") {
-				ctx.fillRect(
-					offsetX + col * cellSize,
-					offsetY + row * cellSize,
-					cellSize,
-					cellSize,
-				);
-			}
-		}
-	}
-}
-
-function generateAsciiAvatar(
-	ctx: CanvasRenderingContext2D,
-	_letter: string,
-	size: number,
-	settings: AvatarSettings,
-) {
-	const pattern = ASCII_S_PATTERN;
-	const rows = pattern.length;
-	const cols = Math.max(...pattern.map((r) => r.length));
-
-	const padding = size * 0.18;
-	const availableSize = size - padding * 2;
-
-	const charWidth = availableSize / cols;
-	const charHeight = availableSize / rows;
-	const fontSize = Math.min(charWidth, charHeight) * 1.3;
-
-	ctx.font = `bold ${fontSize}px "SF Mono", "Monaco", "Menlo", monospace`;
-	ctx.textAlign = "center";
-	ctx.textBaseline = "middle";
-	ctx.fillStyle = settings.foregroundColor;
-
-	const offsetX = padding + charWidth / 2;
-	const offsetY = padding + charHeight / 2;
-
-	for (let row = 0; row < rows; row++) {
-		for (let col = 0; col < pattern[row].length; col++) {
-			const char = pattern[row][col];
-			if (char === "█") {
 				ctx.fillText(
-					"@",
-					offsetX + col * charWidth,
-					offsetY + row * charHeight,
+					glyph,
+					offsetX + col * cellSize + cellSize / 2,
+					offsetY + row * cellSize + cellSize / 2,
 				);
 			}
 		}
@@ -236,16 +157,9 @@ export function generateAvatarCanvas(
 	ctx.fillStyle = settings.backgroundColor;
 	ctx.fill();
 
-	const generators: Record<AvatarPattern, typeof generateLetterAvatar> = {
-		letter: generateLetterAvatar,
-		letterBold: generateLetterBoldAvatar,
-		letterMonospace: generateMonospaceAvatar,
-		pixelLetter: generatePixelLetterAvatar,
-		ascii: generateAsciiAvatar,
-	};
-
-	const generator = generators[settings.pattern];
-	generator(ctx, letter, size, settings);
+	// ASCII is the only supported style. We intentionally ignore `settings.pattern`
+	// so any legacy values still render as ASCII.
+	generateAsciiAvatar(ctx, letter, size, settings);
 
 	return canvas;
 }

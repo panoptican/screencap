@@ -74,6 +74,7 @@ export function PersonView({
 				{showIdentityRow && (
 					<div className="flex items-center gap-3 mb-4 mt-1">
 						<AvatarDisplay
+							userId={friend.userId}
 							username={friend.username}
 							size="lg"
 							avatarSettings={friend.avatarSettings}

@@ -251,9 +251,10 @@ export const useAppStore = create<AppState>((set, _get) => ({
 			},
 		},
 		avatar: {
-			pattern: "pixelLetter",
+			pattern: "ascii",
 			backgroundColor: "#0a0a0a",
 			foregroundColor: "#ffffff",
+			asciiChar: "@",
 		},
 		llmEnabled: true,
 		allowVisionUploads: true,

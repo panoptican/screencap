@@ -46,9 +46,10 @@ jobs:
       - name: Package Electron app (dry run)
         run: npx electron-builder --config electron-builder.yml --publish never
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: false
-          GH_OWNER: yahorbarkouski
-          GH_REPO: screencap
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ env.HAS_SIGNING_CERT }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
 
       - name: Semantic Release
         id: semantic
@@ -77,9 +78,7 @@ jobs:
         run: npx electron-builder --config electron-builder.yml --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_OWNER: yahorbarkouski
-          GH_REPO: screencap
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ env.HAS_SIGNING_CERT }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          CSC_IDENTITY_AUTO_DISCOVERY: ${{ env.HAS_SIGNING_CERT }}

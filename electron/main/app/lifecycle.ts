@@ -6,7 +6,7 @@ import { stopShortcuts } from "../features/shortcuts";
 import { closeDatabase } from "../infra/db";
 import { createLogger } from "../infra/log";
 import { getCapturePopupWindow } from "./capturePopup";
-import { destroyPopupWindow } from "./popup";
+import { destroyPopupWindow, getPopupWindow } from "./popup";
 import {
 	createWindow,
 	getMainWindow,
@@ -34,12 +34,19 @@ export function setupLifecycleHandlers(): void {
 	});
 
 	app.on("activate", () => {
+		// Don't interfere if capture popup is visible
 		const capturePopup = getCapturePopupWindow();
 		if (
 			capturePopup &&
 			!capturePopup.isDestroyed() &&
 			capturePopup.isVisible()
 		) {
+			return;
+		}
+
+		// Don't interfere if tray popup is visible
+		const trayPopup = getPopupWindow();
+		if (trayPopup && !trayPopup.isDestroyed() && trayPopup.isVisible()) {
 			return;
 		}
 
