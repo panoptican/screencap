@@ -332,6 +332,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
 							<ReviewStep
 								eventId={sampleEventId}
 								isCapturingSample={isCapturingSample}
+								onCaptureSample={captureSample}
 								onBack={goBack}
 								onFinish={async () => {
 									if (sampleEventId) {
@@ -1186,11 +1187,13 @@ const ONBOARDING_DEMO_META = {
 function ReviewStep({
 	eventId,
 	isCapturingSample,
+	onCaptureSample,
 	onBack,
 	onFinish,
 }: {
 	eventId: string | null;
 	isCapturingSample: boolean;
+	onCaptureSample: () => Promise<string | null>;
 	onBack: () => void;
 	onFinish: () => Promise<void>;
 }) {
@@ -1198,6 +1201,7 @@ function ReviewStep({
 	const [screenshots, setScreenshots] = useState<EventScreenshot[]>([]);
 	const [isLoading, setIsLoading] = useState(false);
 	const [isFinishing, setIsFinishing] = useState(false);
+	const [retryAttempted, setRetryAttempted] = useState(false);
 
 	const refresh = useCallback(async () => {
 		if (!eventId) {
@@ -1221,6 +1225,14 @@ function ReviewStep({
 	useEffect(() => {
 		void refresh();
 	}, [refresh]);
+
+	useEffect(() => {
+		if (retryAttempted) return;
+		if (isCapturingSample) return;
+		if (eventId) return;
+		setRetryAttempted(true);
+		void onCaptureSample();
+	}, [retryAttempted, isCapturingSample, eventId, onCaptureSample]);
 
 	const primaryScreenshot =
 		screenshots.find((s) => s.isPrimary) ?? screenshots[0] ?? null;
@@ -1253,14 +1265,26 @@ function ReviewStep({
 								loading="lazy"
 							/>
 						) : (
-							<div className="text-sm text-muted-foreground flex items-center gap-2">
+							<div className="text-sm text-muted-foreground flex flex-col items-center gap-3">
 								{isCapturingSample || isLoading ? (
-									<>
+									<div className="flex items-center gap-2">
 										<Loader2 className="h-4 w-4 animate-spin" />
 										Capturing this moment…
-									</>
+									</div>
 								) : (
-									"Waiting for screenshot…"
+									<>
+										<span>Capture failed — try again?</span>
+										<Button
+											variant="outline"
+											size="sm"
+											onClick={() => {
+												setRetryAttempted(false);
+											}}
+										>
+											<RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+											Retry
+										</Button>
+									</>
 								)}
 							</div>
 						)}
@@ -1311,7 +1335,7 @@ function ReviewStep({
 							}
 						}}
 						className="h-9 px-4"
-						disabled={isFinishing || isCapturingSample || isLoading || !eventId}
+						disabled={isFinishing || isCapturingSample || isLoading}
 					>
 						{isFinishing ? (
 							<Loader2 className="h-4 w-4 animate-spin" />

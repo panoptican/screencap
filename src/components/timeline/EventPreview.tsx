@@ -14,7 +14,6 @@ import {
 	Gamepad2,
 	HelpCircle,
 	Home,
-	ImageIcon,
 	Music,
 	Rocket,
 	Settings2,
@@ -371,8 +370,6 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 
 	const [isSharing, setIsSharing] = useState(false);
 	const [shareError, setShareError] = useState(false);
-	const [isGeneratingSocialImage, setIsGeneratingSocialImage] = useState(false);
-	const [socialImageError, setSocialImageError] = useState(false);
 
 	const canShareToFriends = Boolean(identity && !event.isRemote);
 	const isSharedToFriends = event.sharedToFriends === 1;
@@ -391,52 +388,6 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 			setIsSharing(false);
 		}
 	}, [canShareToFriends, isSharedToFriends, event.id, updateEvent]);
-
-	const handleGenerateSocialImage = useCallback(async () => {
-		if (isGeneratingSocialImage) return;
-		setIsGeneratingSocialImage(true);
-		setSocialImageError(false);
-		try {
-			const background = parseBackgroundFromEvent(event);
-			const imagePaths = [
-				previewHighResPath,
-				previewBasePath,
-				event.originalPath,
-				event.thumbnailPath,
-			].filter((p): p is string => Boolean(p));
-
-			if (imagePaths.length === 0) {
-				throw new Error("No image available");
-			}
-
-			const title =
-				event.caption?.trim() ||
-				event.contentTitle?.trim() ||
-				event.windowTitle?.trim() ||
-				"Screenshot";
-
-			const bg = background[0];
-			const generatedPath = await window.api.social.generateSocialImage({
-				imagePaths,
-				title,
-				timestamp: event.timestamp,
-				category: event.userLabel || event.category,
-				appName: event.appName,
-				appIconPath: event.appIconPath,
-				backgroundTitle: bg?.title ?? null,
-				backgroundArtist: bg?.subtitle ?? null,
-				backgroundImageUrl: bg?.imageUrl ?? null,
-			});
-
-			await window.api.app.copyImage(generatedPath);
-		} catch (error) {
-			console.error("Failed to generate social image:", error);
-			setSocialImageError(true);
-			setTimeout(() => setSocialImageError(false), 2000);
-		} finally {
-			setIsGeneratingSocialImage(false);
-		}
-	}, [isGeneratingSocialImage, event, previewHighResPath, previewBasePath]);
 
 	const handleMarkProgress = async () => {
 		await window.api.storage.markProjectProgress(event.id);
@@ -1197,24 +1148,6 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 													</DropdownMenuContent>
 												</DropdownMenu>
 											)}
-											<Button
-												variant="outline"
-												size="sm"
-												className="h-8 gap-2 text-xs"
-												onClick={handleGenerateSocialImage}
-												disabled={isGeneratingSocialImage}
-											>
-												{isGeneratingSocialImage ? (
-													<div className="h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-												) : (
-													<ImageIcon className="h-3.5 w-3.5" />
-												)}
-												{socialImageError
-													? "Failed"
-													: isGeneratingSocialImage
-														? "Generating..."
-														: "Share Image"}
-											</Button>
 											<Button
 												variant="outline"
 												size="sm"

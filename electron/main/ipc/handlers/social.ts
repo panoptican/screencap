@@ -18,7 +18,6 @@ import {
 	registerUsername,
 	syncAvatarSettings,
 } from "../../features/social/IdentityService";
-import { generateSocialShareImage } from "../../features/social/SocialShareImageService";
 import { secureHandle } from "../secure";
 
 const noArgs = z.tuple([]);
@@ -36,19 +35,6 @@ const avatarSettingsArg = z.tuple([
 			.max(1)
 			.regex(/^[\x21-\x7E]$/)
 			.default("@"),
-	}),
-]);
-const generateSocialImageArg = z.tuple([
-	z.object({
-		imagePaths: z.array(z.string().trim().min(1).max(2048)).min(1).max(12),
-		title: z.string().trim().min(1).max(240),
-		timestamp: z.number().finite(),
-		category: z.string().trim().min(1).max(64).nullable(),
-		appName: z.string().trim().min(1).max(128).nullable(),
-		appIconPath: z.string().trim().min(1).max(2048).nullable(),
-		backgroundTitle: z.string().trim().min(1).max(160).nullable(),
-		backgroundArtist: z.string().trim().min(1).max(160).nullable(),
-		backgroundImageUrl: z.string().trim().min(1).max(2048).nullable(),
 	}),
 ]);
 
@@ -127,14 +113,6 @@ export function registerSocialHandlers(): void {
 		avatarSettingsArg,
 		async (avatarSettings: AvatarSettings): Promise<void> => {
 			await syncAvatarSettings(avatarSettings);
-		},
-	);
-
-	secureHandle(
-		IpcChannels.Social.GenerateSocialImage,
-		generateSocialImageArg,
-		async (input) => {
-			return await generateSocialShareImage(input);
 		},
 	);
 }

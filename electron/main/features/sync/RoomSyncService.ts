@@ -23,6 +23,8 @@ const logger = createLogger({ scope: "RoomSyncService" });
 
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
 
+const VERCEL_BLOB_API_URL = "https://blob.vercel-storage.com";
+
 async function uploadImageToBlob(params: {
 	roomId: string;
 	eventId: string;
@@ -53,19 +55,20 @@ async function uploadImageToBlob(params: {
 	const tokenData = (await tokenRes.json()) as {
 		type: string;
 		clientToken: string;
-		uploadUrl: string;
 	};
 
-	if (tokenData.type !== "blob.upload-token") {
-		throw new Error(`unexpected token response type: ${tokenData.type}`);
+	if (tokenData.type !== "blob.generate-client-token" || !tokenData.clientToken) {
+		throw new Error(`invalid token response: ${JSON.stringify(tokenData)}`);
 	}
 
-	const uploadRes = await fetch(tokenData.uploadUrl, {
+	const uploadUrl = `${VERCEL_BLOB_API_URL}/${pathname}`;
+	const uploadRes = await fetch(uploadUrl, {
 		method: "PUT",
 		headers: {
-			Authorization: `Bearer ${tokenData.clientToken}`,
-			"Content-Type": "application/octet-stream",
-			"x-content-length": String(params.encryptedImage.length),
+			authorization: `Bearer ${tokenData.clientToken}`,
+			"x-api-version": "7",
+			"x-content-type": "application/octet-stream",
+			"x-add-random-suffix": "0",
 		},
 		body: params.encryptedImage,
 	});

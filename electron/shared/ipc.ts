@@ -185,7 +185,6 @@ export const IpcChannels = {
 		AcceptFriendRequest: "social:accept-friend-request",
 		RejectFriendRequest: "social:reject-friend-request",
 		SyncAvatarSettings: "social:sync-avatar-settings",
-		GenerateSocialImage: "social:generate-social-image",
 	},
 	Chat: {
 		ListThreads: "chat:list-threads",
@@ -418,17 +417,6 @@ export interface IpcInvokeHandlers {
 	[IpcChannels.Social.SyncAvatarSettings]: (
 		avatarSettings: AvatarSettings,
 	) => Promise<void>;
-	[IpcChannels.Social.GenerateSocialImage]: (input: {
-		imagePaths: string[];
-		title: string;
-		timestamp: number;
-		category: string | null;
-		appName: string | null;
-		appIconPath: string | null;
-		backgroundTitle: string | null;
-		backgroundArtist: string | null;
-		backgroundImageUrl: string | null;
-	}) => Promise<string>;
 
 	[IpcChannels.Chat.ListThreads]: () => Promise<ChatThread[]>;
 	[IpcChannels.Chat.OpenDmThread]: (friendUserId: string) => Promise<string>;
