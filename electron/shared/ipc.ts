@@ -217,6 +217,7 @@ export const IpcChannels = {
 		GetFeed: "social-feed:get-feed",
 		GetFriendDayWrapped: "social-feed:get-friend-day-wrapped",
 		PublishEventToAllFriends: "social-feed:publish-event-to-all-friends",
+		UnpublishEvent: "social-feed:unpublish-event",
 	},
 	Logs: {
 		Collect: "logs:collect",
@@ -491,6 +492,7 @@ export interface IpcInvokeHandlers {
 	[IpcChannels.SocialFeed.PublishEventToAllFriends]: (
 		eventId: string,
 	) => Promise<void>;
+	[IpcChannels.SocialFeed.UnpublishEvent]: (eventId: string) => Promise<void>;
 
 	[IpcChannels.Logs.Collect]: (rendererLogs?: string) => LogsCollectResult;
 	[IpcChannels.Logs.CopyToClipboard]: (rendererLogs?: string) => void;

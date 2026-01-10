@@ -462,6 +462,8 @@ const api = {
 				IpcChannels.SocialFeed.PublishEventToAllFriends,
 				eventId,
 			),
+		unpublishEvent: (eventId: string): Promise<void> =>
+			ipcRenderer.invoke(IpcChannels.SocialFeed.UnpublishEvent, eventId),
 	},
 
 	logs: {

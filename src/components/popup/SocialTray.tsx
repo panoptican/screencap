@@ -175,6 +175,7 @@ export function SocialTray({
 	const [commentMessages, setCommentMessages] = useState<ChatMessage[]>([]);
 	const [commentError, setCommentError] = useState<string | null>(null);
 	const lastCommentTimestampRef = useRef<number>(0);
+	const [isUnpublishing, setIsUnpublishing] = useState(false);
 
 	const { settings, updateSetting } = useSettings();
 	const isDayWrappedSharingEnabled =
@@ -494,6 +495,22 @@ export function SocialTray({
 		}
 	}, [selectedEvent, commentMessages, commentText, commentThreadId, identity]);
 
+	const handleUnpublish = useCallback(async () => {
+		if (!selectedEvent || !identity) return;
+		if (selectedEvent.authorUserId !== identity.userId) return;
+
+		setIsUnpublishing(true);
+		try {
+			await window.api?.socialFeed.unpublishEvent(selectedEvent.id);
+			setSelectedEvent(null);
+			await refresh();
+		} catch (e) {
+			setCommentError(String(e));
+		} finally {
+			setIsUnpublishing(false);
+		}
+	}, [identity, refresh, selectedEvent, setSelectedEvent]);
+
 	const closeFriend = useCallback(() => {
 		setSelectedFriend(null);
 		setSelectedDayWrapped(null);
@@ -760,6 +777,11 @@ export function SocialTray({
 					commentError={commentError}
 					localEventPaths={localEventPaths}
 					onUserClick={handleUserClickFromDetail}
+					isOwnEvent={
+						identity ? selectedEvent.authorUserId === identity.userId : false
+					}
+					onUnpublish={() => void handleUnpublish()}
+					isUnpublishing={isUnpublishing}
 				/>
 			</div>
 		);

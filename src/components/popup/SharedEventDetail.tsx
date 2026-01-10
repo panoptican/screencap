@@ -3,8 +3,10 @@ import {
 	Expand,
 	ExternalLink,
 	Globe,
+	Loader2,
 	Music,
 	SendHorizontal,
+	Trash2,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -78,6 +80,9 @@ interface SharedEventDetailProps {
 	commentError: string | null;
 	localEventPaths: Map<string, string | null>;
 	onUserClick?: (userId: string) => void;
+	isOwnEvent?: boolean;
+	onUnpublish?: () => void;
+	isUnpublishing?: boolean;
 }
 
 export function SharedEventDetail({
@@ -92,6 +97,9 @@ export function SharedEventDetail({
 	commentError,
 	localEventPaths,
 	onUserClick,
+	isOwnEvent,
+	onUnpublish,
+	isUnpublishing,
 }: SharedEventDetailProps) {
 	const usersById = useMemo(() => {
 		const map = new Map<string, string>();
@@ -181,13 +189,30 @@ export function SharedEventDetail({
 								</div>
 							</div>
 						)}
-						<button
-							type="button"
-							className="absolute top-2 left-2 h-8 w-8 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:bg-black/70 hover:scale-105"
-							onClick={expandEventImage}
-						>
-							<Expand className="h-4 w-4 text-white" />
-						</button>
+						<div className="absolute top-2 left-2 flex items-center gap-1.5">
+							<button
+								type="button"
+								className="h-8 w-8 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:bg-black/70 hover:scale-105"
+								onClick={expandEventImage}
+							>
+								<Expand className="h-4 w-4 text-white" />
+							</button>
+							{isOwnEvent && onUnpublish && (
+								<button
+									type="button"
+									className="h-8 w-8 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:bg-destructive/80 hover:scale-105 disabled:opacity-50"
+									onClick={onUnpublish}
+									disabled={isUnpublishing}
+									title="Unpublish"
+								>
+									{isUnpublishing ? (
+										<Loader2 className="h-4 w-4 text-white animate-spin" />
+									) : (
+										<Trash2 className="h-4 w-4 text-white" />
+									)}
+								</button>
+							)}
+						</div>
 
 						{event.category && (
 							<div className="absolute top-2 right-2">

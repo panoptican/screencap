@@ -300,6 +300,12 @@ export function deleteCachedRoomEvents(roomId: string): void {
 	db.prepare("DELETE FROM room_events_cache WHERE room_id = ?").run(roomId);
 }
 
+export function deleteCachedRoomEventById(eventId: string): void {
+	if (!isDbOpen()) return;
+	const db = getDatabase();
+	db.prepare("DELETE FROM room_events_cache WHERE id = ?").run(eventId);
+}
+
 export function getLatestCachedEventTimestamp(roomId: string): number | null {
 	if (!isDbOpen()) return null;
 	const db = getDatabase();

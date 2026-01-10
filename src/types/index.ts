@@ -913,6 +913,7 @@ declare global {
 					friendUserId: string,
 				) => Promise<DayWrappedSnapshot | null>;
 				publishEventToAllFriends: (eventId: string) => Promise<void>;
+				unpublishEvent: (eventId: string) => Promise<void>;
 			};
 			logs: {
 				collect: (rendererLogs?: string) => Promise<LogsCollectResult>;

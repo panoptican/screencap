@@ -6,6 +6,7 @@ import {
 	getLatestFriendDayWrappedSnapshot,
 	getSocialFeedEvents,
 	publishEventToAllFriends,
+	unpublishEventFromFriends,
 } from "../../features/socialFeed";
 import { secureHandle } from "../secure";
 
@@ -61,6 +62,14 @@ export function registerSocialFeedHandlers(): void {
 		eventIdArg,
 		async (eventId: string): Promise<void> => {
 			await publishEventToAllFriends(eventId);
+		},
+	);
+
+	secureHandle(
+		IpcChannels.SocialFeed.UnpublishEvent,
+		eventIdArg,
+		async (eventId: string): Promise<void> => {
+			await unpublishEventFromFriends(eventId);
 		},
 	);
 }
