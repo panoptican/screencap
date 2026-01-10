@@ -1,3 +1,18 @@
+# [1.11.0](https://github.com/yahorbarkouski/screencap/compare/v1.10.0...v1.11.0) (2026-01-10)
+
+
+### Bug Fixes
+
+* publishing to friends ([2eabecc](https://github.com/yahorbarkouski/screencap/commit/2eabecca80ad73cb26650ea0b5037210dfdc9df8))
+
+
+### Features
+
+* apple signing ([1adc082](https://github.com/yahorbarkouski/screencap/commit/1adc082ccf4042a77dc0efa3dac379784c4f9ac4))
+* better eod ([ef967bb](https://github.com/yahorbarkouski/screencap/commit/ef967bbfe58f799b4b51b9328db39b9898f82d8e))
+* better eof editor ([67ec22c](https://github.com/yahorbarkouski/screencap/commit/67ec22c29b1df3a92360e999ed923027ebe309e9))
+* eod fixes ([8df8fd7](https://github.com/yahorbarkouski/screencap/commit/8df8fd706b547d1e1e2e326e21ce3fd86b07b4cf))
+
 # [1.10.0](https://github.com/yahorbarkouski/screencap/compare/v1.9.1...v1.10.0) (2026-01-05)
 
 
