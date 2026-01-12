@@ -156,6 +156,7 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 	const [activeScreenshotId, setActiveScreenshotId] = useState<string | null>(
 		null,
 	);
+	const [expandedImage, setExpandedImage] = useState(false);
 	const [automationRules, setAutomationRules] = useState<
 		Settings["automationRules"] | null
 	>(null);
@@ -555,7 +556,11 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 								<ContextMenuTrigger asChild>
 									<div className="relative w-full h-[55vh] flex items-center justify-center">
 										{previewPath ? (
-											<div className="relative w-full h-full">
+											<button
+												type="button"
+												className="relative w-full h-full cursor-zoom-in bg-transparent border-0 p-0"
+												onClick={() => setExpandedImage(true)}
+											>
 												<img
 													src={`local-file://${previewPath}`}
 													alt=""
@@ -573,7 +578,7 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 														}
 													}}
 												/>
-											</div>
+											</button>
 										) : (
 											<div className="flex flex-col items-center justify-center text-muted-foreground/50 gap-3">
 												<div className="p-4 rounded-full bg-muted/50">
@@ -1165,6 +1170,78 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 					</div>
 				</ScrollArea>
 			</DialogContent>
+
+			<Dialog open={expandedImage} onOpenChange={setExpandedImage}>
+				<DialogContent className="max-w-[95vw] max-h-[95vh] w-auto h-auto p-0 overflow-hidden bg-black/95 backdrop-blur-xl border-border/20 shadow-2xl outline-none">
+					<DialogTitle className="sr-only">Expanded image view</DialogTitle>
+					<ContextMenu>
+						<ContextMenuTrigger asChild>
+							<button
+								type="button"
+								className="relative flex items-center justify-center cursor-zoom-out bg-transparent border-0 p-0"
+								onClick={() => setExpandedImage(false)}
+							>
+								{previewPath && (
+									<img
+										src={`local-file://${previewPath}`}
+										alt=""
+										className={cn(
+											"max-w-[95vw] max-h-[95vh] object-contain",
+											isNsfw && !nsfwRevealed && "blur-2xl scale-105",
+										)}
+									/>
+								)}
+							</button>
+						</ContextMenuTrigger>
+						<ContextMenuContent>
+							<ContextMenuItem onSelect={handleCopyPreview}>
+								<Copy className="mr-2 h-4 w-4" />
+								Copy image
+							</ContextMenuItem>
+						</ContextMenuContent>
+					</ContextMenu>
+					{screenshots.length > 1 && (
+						<>
+							<div className="absolute inset-y-0 left-0 flex items-center px-4">
+								<Button
+									variant="secondary"
+									size="icon"
+									className="h-12 w-12 rounded-full bg-background/80 backdrop-blur border border-border/50 shadow-lg hover:bg-background hover:scale-110 transition-all"
+									onClick={(e) => {
+										e.stopPropagation();
+										navigate(-1);
+									}}
+								>
+									<ChevronLeft className="h-6 w-6" />
+								</Button>
+							</div>
+							<div className="absolute inset-y-0 right-0 flex items-center px-4">
+								<Button
+									variant="secondary"
+									size="icon"
+									className="h-12 w-12 rounded-full bg-background/80 backdrop-blur border border-border/50 shadow-lg hover:bg-background hover:scale-110 transition-all"
+									onClick={(e) => {
+										e.stopPropagation();
+										navigate(1);
+									}}
+								>
+									<ChevronRight className="h-6 w-6" />
+								</Button>
+							</div>
+							{previewIndexLabel && (
+								<div className="absolute bottom-6 left-1/2 -translate-x-1/2">
+									<Badge
+										variant="secondary"
+										className="bg-background/80 backdrop-blur border border-border/50 shadow-lg px-4 py-1.5 text-sm"
+									>
+										{previewIndexLabel}
+									</Badge>
+								</div>
+							)}
+						</>
+					)}
+				</DialogContent>
+			</Dialog>
 		</Dialog>
 	);
 }
