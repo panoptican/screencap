@@ -467,9 +467,9 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 			}}
 		>
 			<DialogContent className="max-w-3xl h-[min(92vh,980px)] p-0 overflow-hidden bg-background/95 backdrop-blur-xl border-border/50 shadow-2xl flex flex-col gap-0 outline-none">
-				<div className="flex items-start justify-between pl-6 pr-10 py-2 border-b border-border/20 shrink-0 bg-background/40">
-					<div className="min-w-0 py-2">
-						<div className="flex flex-wrap items-center gap-2 min-w-0">
+				<div className="flex items-start justify-between pl-6 pr-14 py-2 border-b border-border/20 shrink-0 bg-background/40">
+					<div className="min-w-0 py-2 overflow-visible">
+						<div className="flex flex-wrap items-center gap-2 min-w-0 overflow-visible">
 							<DialogTitle className="min-w-0 flex-1 text-lg font-semibold leading-tight line-clamp-2">
 								{eventName}
 							</DialogTitle>
@@ -478,14 +478,15 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 									<button
 										type="button"
 										className={cn(
-											"shrink-0 h-6 px-2 rounded-full text-xs font-medium transition hover:opacity-90",
+											"relative z-10 shrink-0 h-6 px-2.5 rounded-full text-xs font-medium transition-all flex items-center gap-1 hover:scale-105",
 											getCategoryColor(event.userLabel || event.category),
 										)}
 									>
 										{event.userLabel || event.category || "Label"}
+										<ChevronRight className="h-3 w-3 opacity-60" />
 									</button>
 								</DropdownMenuTrigger>
-								<DropdownMenuContent align="start" className="w-44">
+								<DropdownMenuContent align="start" className="w-44 z-[60]">
 									<DropdownMenuRadioGroup
 										value={event.userLabel || event.category || ""}
 										onValueChange={(value) => void handleRelabel(value)}
