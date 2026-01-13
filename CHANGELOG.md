@@ -1,3 +1,11 @@
+## [1.12.1](https://github.com/yahorbarkouski/screencap/compare/v1.12.0...v1.12.1) (2026-01-13)
+
+
+### Bug Fixes
+
+* event preview classification ([401f12c](https://github.com/yahorbarkouski/screencap/commit/401f12c0c55700f352724761343b3815b7cad4ef))
+* event previews ([40b6cd8](https://github.com/yahorbarkouski/screencap/commit/40b6cd801289bff4085a703080d4cfc6c4af1a06))
+
 # [1.12.0](https://github.com/yahorbarkouski/screencap/compare/v1.11.1...v1.12.0) (2026-01-11)
 
 
