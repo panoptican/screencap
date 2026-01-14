@@ -1,3 +1,15 @@
+# [1.13.0](https://github.com/yahorbarkouski/screencap/compare/v1.12.1...v1.13.0) (2026-01-14)
+
+
+### Bug Fixes
+
+* openai compabitility ([ebe4d56](https://github.com/yahorbarkouski/screencap/commit/ebe4d56074f6327241aa95af559c9c5d1ef6d48f))
+
+
+### Features
+
+* add apple music background ([7443bb9](https://github.com/yahorbarkouski/screencap/commit/7443bb9d53cae53ff8a4d0a083e756b80c6234a7))
+
 ## [1.12.1](https://github.com/yahorbarkouski/screencap/compare/v1.12.0...v1.12.1) (2026-01-13)
 
 
