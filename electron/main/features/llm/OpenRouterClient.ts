@@ -2,12 +2,50 @@ import type { z } from "zod";
 import { createLogger } from "../../infra/log";
 import { getApiKey } from "../../infra/settings";
 
-const logger = createLogger({ scope: "OpenRouterClient" });
+const logger = createLogger({ scope: "LLMClient" });
 
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
-const DEFAULT_MODEL = "openai/gpt-5";
+const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
+const DEFAULT_OPENROUTER_MODEL = "openai/gpt-5";
+const DEFAULT_OPENAI_MODEL = "gpt-5";
 const DEFAULT_TIMEOUT_MS = 90_000;
 const DEFAULT_TEST_TIMEOUT_MS = 15_000;
+
+function isOpenRouterKey(apiKey: string): boolean {
+	return apiKey.startsWith("sk-or-");
+}
+
+function getApiConfig(apiKey: string, model?: string): {
+	url: string;
+	model: string;
+	headers: Record<string, string>;
+	supportsReasoningEffort: boolean;
+} {
+	if (isOpenRouterKey(apiKey)) {
+		return {
+			url: OPENROUTER_API_URL,
+			model: model?.trim() || DEFAULT_OPENROUTER_MODEL,
+			headers: {
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${apiKey}`,
+				"HTTP-Referer": "https://screencap.app",
+				"X-Title": "Screencap",
+			},
+			supportsReasoningEffort: true,
+		};
+	}
+
+	const normalizedModel = model?.trim().replace(/^openai\//, "") || DEFAULT_OPENAI_MODEL;
+	return {
+		url: OPENAI_API_URL,
+		model: normalizedModel,
+		headers: {
+			"Content-Type": "application/json",
+			Authorization: `Bearer ${apiKey}`,
+		},
+		supportsReasoningEffort: false,
+	};
+}
 
 async function fetchWithTimeout(
 	url: string,
@@ -78,13 +116,16 @@ export async function callOpenRouter<T>(
 		throw new Error("API key not configured");
 	}
 
-	const model = options?.model?.trim() || DEFAULT_MODEL;
+	const config = getApiConfig(apiKey, options?.model);
 	const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 	const body: Record<string, unknown> = {
-		model,
+		model: config.model,
 		messages,
-		reasoning_effort: "low",
 	};
+
+	if (config.supportsReasoningEffort) {
+		body.reasoning_effort = "low";
+	}
 
 	if (options?.maxTokens !== undefined) {
 		body.max_tokens = options.maxTokens;
@@ -97,15 +138,10 @@ export async function callOpenRouter<T>(
 	let response: Response;
 	try {
 		response = await fetchWithTimeout(
-			OPENROUTER_API_URL,
+			config.url,
 			{
 				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					Authorization: `Bearer ${apiKey}`,
-					"HTTP-Referer": "https://screencap.app",
-					"X-Title": "Screencap",
-				},
+				headers: config.headers,
 				body: JSON.stringify(body),
 			},
 			timeoutMs,
@@ -114,7 +150,7 @@ export async function callOpenRouter<T>(
 		recordCall({
 			timestamp: Date.now(),
 			kind: "json",
-			model: String(body.model ?? DEFAULT_MODEL),
+			model: config.model,
 			status: 0,
 		});
 		throw error;
@@ -123,14 +159,14 @@ export async function callOpenRouter<T>(
 	recordCall({
 		timestamp: Date.now(),
 		kind: "json",
-		model: String(body.model ?? DEFAULT_MODEL),
+		model: config.model,
 		status: response.status,
 	});
 
 	if (!response.ok) {
 		const error = await response.text();
-		logger.error("OpenRouter API error:", { status: response.status, error });
-		throw new Error(`OpenRouter API error: ${response.status} - ${error}`);
+		logger.error("LLM API error:", { status: response.status, error });
+		throw new Error(`LLM API error: ${response.status} - ${error}`);
 	}
 
 	const data = (await response.json()) as OpenRouterChatCompletionResponse;
@@ -150,13 +186,16 @@ export async function callOpenRouterRaw(
 		throw new Error("API key not configured");
 	}
 
-	const model = options?.model?.trim() || DEFAULT_MODEL;
+	const config = getApiConfig(apiKey, options?.model);
 	const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 	const body: Record<string, unknown> = {
-		model,
+		model: config.model,
 		messages,
-		reasoning_effort: "low",
 	};
+
+	if (config.supportsReasoningEffort) {
+		body.reasoning_effort = "low";
+	}
 
 	if (options?.maxTokens !== undefined) {
 		body.max_tokens = options.maxTokens;
@@ -169,15 +208,10 @@ export async function callOpenRouterRaw(
 	let response: Response;
 	try {
 		response = await fetchWithTimeout(
-			OPENROUTER_API_URL,
+			config.url,
 			{
 				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					Authorization: `Bearer ${apiKey}`,
-					"HTTP-Referer": "https://screencap.app",
-					"X-Title": "Screencap",
-				},
+				headers: config.headers,
 				body: JSON.stringify(body),
 			},
 			timeoutMs,
@@ -186,7 +220,7 @@ export async function callOpenRouterRaw(
 		recordCall({
 			timestamp: Date.now(),
 			kind: "raw",
-			model: String(body.model ?? DEFAULT_MODEL),
+			model: config.model,
 			status: 0,
 		});
 		throw error;
@@ -195,14 +229,14 @@ export async function callOpenRouterRaw(
 	recordCall({
 		timestamp: Date.now(),
 		kind: "raw",
-		model: String(body.model ?? DEFAULT_MODEL),
+		model: config.model,
 		status: response.status,
 	});
 
 	if (!response.ok) {
 		const error = await response.text();
-		logger.error("OpenRouter API error:", { status: response.status, error });
-		throw new Error(`OpenRouter API error: ${response.status}`);
+		logger.error("LLM API error:", { status: response.status, error });
+		throw new Error(`LLM API error: ${response.status}`);
 	}
 
 	const data = (await response.json()) as OpenRouterChatCompletionResponse;
@@ -218,21 +252,16 @@ export async function testConnection(model?: string): Promise<{
 		return { success: false, error: "API key not configured" };
 	}
 
-	const selectedModel = model?.trim() || DEFAULT_MODEL;
+	const config = getApiConfig(apiKey, model);
 
 	try {
 		const response = await fetchWithTimeout(
-			OPENROUTER_API_URL,
+			config.url,
 			{
 				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					Authorization: `Bearer ${apiKey}`,
-					"HTTP-Referer": "https://screencap.app",
-					"X-Title": "Screencap",
-				},
+				headers: config.headers,
 				body: JSON.stringify({
-					model: selectedModel,
+					model: config.model,
 					messages: [{ role: "user", content: "Hello" }],
 				}),
 			},
@@ -242,7 +271,7 @@ export async function testConnection(model?: string): Promise<{
 		recordCall({
 			timestamp: Date.now(),
 			kind: "test",
-			model: selectedModel,
+			model: config.model,
 			status: response.status,
 		});
 
