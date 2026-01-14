@@ -6,11 +6,15 @@
 	"author": "",
 	"type": "module",
 	"main": "./out/main/index.js",
+	"bin": {
+		"screencap-mcp": "./dist-mcp/index.js"
+	},
 	"scripts": {
 		"dev": "npm run rebuild:electron && electron-vite dev",
 		"dev:fast": "electron-vite dev",
 		"eval:classification": "npm run rebuild:electron && electron-vite dev -- --eval-classification",
 		"build": "electron-vite build",
+		"build:mcp": "npm run rebuild:node && tsup --config tsup.mcp.config.ts",
 		"preview": "electron-vite preview",
 		"rebuild:node": "node scripts/rebuild-node-natives.mjs",
 		"rebuild:electron": "electron-builder install-app-deps",
@@ -23,6 +27,7 @@
 		"postinstall": "electron-builder install-app-deps"
 	},
 	"dependencies": {
+		"@modelcontextprotocol/sdk": "^1.25.2",
 		"@radix-ui/react-context-menu": "^2.2.16",
 		"@radix-ui/react-dialog": "^1.1.4",
 		"@radix-ui/react-dropdown-menu": "^2.1.4",
@@ -76,6 +81,7 @@
 		"png-to-ico": "^3.0.1",
 		"postcss": "^8.4.49",
 		"tailwindcss": "^3.4.17",
+		"tsup": "^8.5.1",
 		"typescript": "^5.7.2",
 		"vite": "^5.4.11",
 		"vitest": "^3.2.4"

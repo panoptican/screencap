@@ -479,6 +479,86 @@ screencap/
 
 ---
 
+## MCP Integration (Claude Desktop / Cursor)
+
+Screencap includes an MCP (Model Context Protocol) server that exposes your activity data to Claude Desktop, Cursor, and other MCP-compatible tools.
+
+### Build the MCP Server
+
+```bash
+npm run build:mcp
+```
+
+This creates `dist-mcp/index.js` — a standalone Node.js script.
+
+### Configure Claude Desktop
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "screencap": {
+      "command": "node",
+      "args": ["/path/to/screencap/dist-mcp/index.js"]
+    }
+  }
+}
+```
+
+
+### Available Tools
+
+| Tool | Description |
+|------|-------------|
+| `query_events` | Query events with filters (date, category, project, app) |
+| `search_events` | Full-text search across captions and window titles |
+| `get_recent_activity` | Quick access to recent events |
+| `get_time_summary` | Category/project time breakdown |
+| `get_app_usage` | App usage statistics |
+| `get_website_usage` | Website usage statistics |
+| `compare_periods` | Compare productivity across two periods |
+| `get_project_progress` | Progress events for a project |
+| `list_projects` | All projects with stats |
+| `get_addiction_stats` | Addiction tracking data |
+| `get_focus_score` | Focus/distraction score for a day |
+| `get_event_image` | Get thumbnail for a specific event |
+
+### Available Resources
+
+| Resource | Description |
+|----------|-------------|
+| `screencap://activity/today` | Today's activity events |
+| `screencap://activity/recent` | Recent 2 hours of activity |
+| `screencap://stats/today` | Today's category breakdown |
+| `screencap://stats/week` | This week's statistics |
+| `screencap://projects` | All projects with stats |
+| `screencap://stories/latest` | Recent daily/weekly stories |
+| `screencap://memories` | User-defined memories |
+| `screencap://eod/today` | Today's end-of-day entry |
+
+### Available Prompts
+
+| Prompt | Description |
+|--------|-------------|
+| `daily_summary` | Summarize activity for a day |
+| `project_status` | Get status of a specific project |
+| `focus_analysis` | Analyze focus and distraction patterns |
+
+### Example Usage
+
+In Claude Desktop or Cursor, you can now ask:
+
+- "What was I working on today?"
+- "How did I spend my time this week?"
+- "Show me progress on the Screencap project"
+- "Am I spending too much time on YouTube?"
+- "Compare my productivity this week vs last week"
+
+The LLM will use the appropriate tools to query your Screencap data and provide insights.
+
+---
+
 ## Contributing
 
 Read [Security Practices](docs/security.md) before adding new IPC handlers or file access surfaces.

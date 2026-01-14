@@ -18,7 +18,9 @@ import type {
 type LoadStatus = "idle" | "loading" | "success" | "error";
 
 function isClearableCategory(key: string): key is ClearableStorageCategory {
-	return ["tmp", "thumbnails", "appicons", "favicons", "other"].includes(key);
+	return ["tmp", "thumbnails", "appicons", "favicons", "hq", "other"].includes(
+		key,
+	);
 }
 
 export function StorageUsagePanel() {

@@ -1,11 +1,21 @@
 import { existsSync, unlinkSync } from "node:fs";
-import { listHqCleanupCandidates } from "../../infra/db/repositories/EventRepository";
+import {
+	type HqCleanupCutoffs,
+	listHqCleanupCandidates,
+} from "../../infra/db/repositories/EventRepository";
 import { createLogger } from "../../infra/log";
 
 const logger = createLogger({ scope: "HqRetention" });
 
 const HOUR_MS = 60 * 60 * 1000;
-const HQ_RETENTION_HOURS = 12;
+const DAY_MS = 24 * HOUR_MS;
+
+const REGULAR_RETENTION_HOURS = 12;
+const SHARED_RETENTION_HOURS = 48;
+const PROGRESS_RETENTION_HOURS = 24;
+const PROGRESS_FALLBACK_DAYS = 7;
+const EOD_BUFFER_HOURS = 24;
+
 const STARTUP_DELAY_MS = 10_000;
 const RUN_INTERVAL_MS = 30 * 60 * 1000;
 const MAX_RUN_TIME_MS = 1_500;
@@ -37,6 +47,17 @@ function safeUnlinkHq(hqPath: string): boolean {
 	return false;
 }
 
+function buildCutoffs(): HqCleanupCutoffs {
+	const now = Date.now();
+	return {
+		regularCutoff: now - REGULAR_RETENTION_HOURS * HOUR_MS,
+		sharedCutoff: now - SHARED_RETENTION_HOURS * HOUR_MS,
+		progressCutoff: now - PROGRESS_RETENTION_HOURS * HOUR_MS,
+		progressFallbackCutoff: now - PROGRESS_FALLBACK_DAYS * DAY_MS,
+		eodBufferMs: EOD_BUFFER_HOURS * HOUR_MS,
+	};
+}
+
 async function runHqCleanup(reason: HqRetentionRunReason): Promise<void> {
 	if (isRunning) {
 		rerunRequested = true;
@@ -47,12 +68,12 @@ async function runHqCleanup(reason: HqRetentionRunReason): Promise<void> {
 	rerunRequested = false;
 
 	try {
-		const cutoff = Date.now() - HQ_RETENTION_HOURS * HOUR_MS;
+		const cutoffs = buildCutoffs();
 		let deleted = 0;
 		const startedAt = Date.now();
 
 		for (;;) {
-			const candidates = listHqCleanupCandidates(cutoff, BATCH_SIZE);
+			const candidates = listHqCleanupCandidates(cutoffs, BATCH_SIZE);
 			if (candidates.length === 0) break;
 
 			for (const candidate of candidates) {
@@ -73,8 +94,9 @@ async function runHqCleanup(reason: HqRetentionRunReason): Promise<void> {
 		if (deleted > 0) {
 			logger.info("HQ cleanup finished", {
 				reason,
-				retentionHours: HQ_RETENTION_HOURS,
-				cutoff,
+				regularRetentionHours: REGULAR_RETENTION_HOURS,
+				sharedRetentionHours: SHARED_RETENTION_HOURS,
+				progressFallbackDays: PROGRESS_FALLBACK_DAYS,
 				deleted,
 			});
 		}

@@ -429,6 +429,7 @@ export type ClearableStorageCategory =
 	| "thumbnails"
 	| "appicons"
 	| "favicons"
+	| "hq"
 	| "other";
 
 export interface StorageUsageEntry {

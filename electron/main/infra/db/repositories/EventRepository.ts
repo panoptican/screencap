@@ -243,28 +243,67 @@ export function listExpiredEventIds(
 	return rows.map((r) => r.id);
 }
 
+export interface HqCleanupCutoffs {
+	regularCutoff: number;
+	sharedCutoff: number;
+	progressCutoff: number;
+	progressFallbackCutoff: number;
+	eodBufferMs: number;
+}
+
 export function listHqCleanupCandidates(
-	cutoffTimestamp: number,
+	cutoffs: HqCleanupCutoffs,
 	limit: number,
 ): Array<{ id: string; originalPath: string }> {
 	if (!isDbOpen()) return [];
 	if (limit <= 0) return [];
 
 	const db = getDatabase();
+	const now = Date.now();
+	const eodSubmittedBefore = now - cutoffs.eodBufferMs;
+
 	const rows = db
 		.prepare(
 			`
-      SELECT id, original_path
-      FROM events
-      WHERE original_path IS NOT NULL
-        AND COALESCE(end_timestamp, timestamp) < ?
-        AND project_progress = 0
-        AND shared_to_friends = 0
-      ORDER BY timestamp ASC
+      SELECT e.id, e.original_path
+      FROM events e
+      WHERE e.original_path IS NOT NULL
+        AND (
+          -- Tier 1: Regular events (not progress, not shared)
+          (e.project_progress = 0 AND e.shared_to_friends = 0 
+           AND COALESCE(e.end_timestamp, e.timestamp) < ?)
+          OR
+          -- Tier 2: Shared events (longer cutoff, image already uploaded)
+          (e.shared_to_friends = 1 
+           AND COALESCE(e.end_timestamp, e.timestamp) < ?)
+          OR
+          -- Tier 3a: Progress events with EOD submitted + buffer
+          (e.project_progress = 1 AND e.shared_to_friends = 0
+           AND COALESCE(e.end_timestamp, e.timestamp) < ?
+           AND EXISTS (
+             SELECT 1 FROM eod_entries eod
+             WHERE eod.submitted_at IS NOT NULL
+               AND eod.submitted_at < ?
+               AND eod.day_start <= e.timestamp
+               AND e.timestamp <= eod.day_end
+           ))
+          OR
+          -- Tier 3b: Progress events fallback (older than 7 days, no EOD needed)
+          (e.project_progress = 1 
+           AND COALESCE(e.end_timestamp, e.timestamp) < ?)
+        )
+      ORDER BY e.timestamp ASC
       LIMIT ?
     `,
 		)
-		.all(cutoffTimestamp, limit) as Array<{
+		.all(
+			cutoffs.regularCutoff,
+			cutoffs.sharedCutoff,
+			cutoffs.progressCutoff,
+			eodSubmittedBefore,
+			cutoffs.progressFallbackCutoff,
+			limit,
+		) as Array<{
 		id: string;
 		original_path: string;
 	}>;

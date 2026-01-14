@@ -27,9 +27,18 @@ function createEntriesMap(): Map<
 			"originals",
 			{
 				label: "Originals",
-				path: "screenshots/originals",
+				path: "screenshots/originals/*.webp",
 				bytes: 0,
 				clearable: false,
+			},
+		],
+		[
+			"hq",
+			{
+				label: "HQ Originals",
+				path: "screenshots/originals/*.hq.png",
+				bytes: 0,
+				clearable: true,
 			},
 		],
 		[
@@ -121,7 +130,9 @@ function resolveCategoryKey(options: {
 		filePath,
 	} = options;
 
-	if (isSubpath(originalsDir, filePath)) return "originals";
+	if (isSubpath(originalsDir, filePath)) {
+		return filePath.endsWith(".hq.png") ? "hq" : "originals";
+	}
 	if (isSubpath(thumbnailsDir, filePath)) return "thumbnails";
 	if (isSubpath(faviconsDir, filePath)) return "favicons";
 	if (isSubpath(appIconsDir, filePath)) return "appicons";
@@ -271,6 +282,7 @@ export function getStorageCategoryPath(category: string): string | null {
 
 	const paths: Record<string, string> = {
 		originals: resolve(join(screenshotsDir, "originals")),
+		hq: resolve(join(screenshotsDir, "originals")),
 		thumbnails: resolve(join(screenshotsDir, "thumbnails")),
 		favicons: resolve(join(screenshotsDir, "favicons")),
 		appicons: resolve(join(screenshotsDir, "appicons")),
@@ -284,13 +296,48 @@ export function getStorageCategoryPath(category: string): string | null {
 	return paths[category] ?? null;
 }
 
+async function clearHqFiles(originalsDir: string): Promise<number> {
+	let clearedBytes = 0;
+	let entries: Dirent[];
+	try {
+		entries = await readdir(originalsDir, { withFileTypes: true });
+	} catch {
+		return 0;
+	}
+
+	for (const entry of entries) {
+		if (!entry.isFile()) continue;
+		if (!entry.name.endsWith(".hq.png")) continue;
+
+		const fullPath = join(originalsDir, entry.name);
+		try {
+			const stat = await lstat(fullPath);
+			clearedBytes += stat.size;
+			await rm(fullPath, { force: true });
+		} catch {
+			/* skip */
+		}
+	}
+
+	return clearedBytes;
+}
+
 export async function clearStorageCategory(
 	category: ClearableStorageCategory,
 ): Promise<{ clearedBytes: number }> {
 	const userDataDir = resolve(app.getPath("userData"));
 	const screenshotsDir = resolve(join(userDataDir, "screenshots"));
+	const originalsDir = resolve(join(screenshotsDir, "originals"));
 
-	const categoryPaths: Record<ClearableStorageCategory, string> = {
+	if (category === "hq") {
+		const clearedBytes = await clearHqFiles(originalsDir);
+		return { clearedBytes };
+	}
+
+	const categoryPaths: Record<
+		Exclude<ClearableStorageCategory, "hq">,
+		string
+	> = {
 		tmp: resolve(join(screenshotsDir, "tmp")),
 		thumbnails: resolve(join(screenshotsDir, "thumbnails")),
 		favicons: resolve(join(screenshotsDir, "favicons")),
