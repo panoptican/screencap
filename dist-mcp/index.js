@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-// electron/mcp/index.ts
+// electron/mcp/server.ts
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
@@ -251,8 +251,8 @@ function formatMarkdownTimeSummary(summary) {
 }
 
 // electron/mcp/prompts/dailySummary.ts
-function registerDailySummaryPrompt(server2) {
-  server2.registerPrompt(
+function registerDailySummaryPrompt(server) {
+  server.registerPrompt(
     "daily_summary",
     {
       description: "Summarize activity for a specific day",
@@ -325,8 +325,8 @@ Please provide an honest summary of how I spent my time, what I accomplished, an
 
 // electron/mcp/prompts/focusAnalysis.ts
 import { z as z2 } from "zod";
-function registerFocusAnalysisPrompt(server2) {
-  server2.registerPrompt(
+function registerFocusAnalysisPrompt(server) {
+  server.registerPrompt(
     "focus_analysis",
     {
       description: "Analyze focus and distraction patterns",
@@ -418,8 +418,8 @@ Please analyze my focus patterns. Be honest about:
 
 // electron/mcp/prompts/projectStatus.ts
 import { z as z3 } from "zod";
-function registerProjectStatusPrompt(server2) {
-  server2.registerPrompt(
+function registerProjectStatusPrompt(server) {
+  server.registerPrompt(
     "project_status",
     {
       description: "Get status summary for a specific project",
@@ -479,15 +479,15 @@ Please provide a summary of the project status: what progress has been made, wha
 }
 
 // electron/mcp/prompts/index.ts
-function registerPrompts(server2) {
-  registerDailySummaryPrompt(server2);
-  registerProjectStatusPrompt(server2);
-  registerFocusAnalysisPrompt(server2);
+function registerPrompts(server) {
+  registerDailySummaryPrompt(server);
+  registerProjectStatusPrompt(server);
+  registerFocusAnalysisPrompt(server);
 }
 
 // electron/mcp/resources/activity.ts
-function registerActivityResources(server2) {
-  server2.registerResource(
+function registerActivityResources(server) {
+  server.registerResource(
     "activity-today",
     "screencap://activity/today",
     { description: "Today's activity events" },
@@ -514,7 +514,7 @@ function registerActivityResources(server2) {
       };
     }
   );
-  server2.registerResource(
+  server.registerResource(
     "activity-recent",
     "screencap://activity/recent",
     { description: "Recent activity (last 2 hours)" },
@@ -545,8 +545,8 @@ function registerActivityResources(server2) {
 }
 
 // electron/mcp/resources/memories.ts
-function registerMemoriesResources(server2) {
-  server2.registerResource(
+function registerMemoriesResources(server) {
+  server.registerResource(
     "memories",
     "screencap://memories",
     { description: "User memories (projects, addictions, preferences)" },
@@ -581,7 +581,7 @@ function registerMemoriesResources(server2) {
       };
     }
   );
-  server2.registerResource(
+  server.registerResource(
     "eod-today",
     "screencap://eod/today",
     { description: "Today's end-of-day entry" },
@@ -640,8 +640,8 @@ function registerMemoriesResources(server2) {
 }
 
 // electron/mcp/resources/projects.ts
-function registerProjectsResources(server2) {
-  server2.registerResource(
+function registerProjectsResources(server) {
+  server.registerResource(
     "projects-list",
     "screencap://projects",
     { description: "List of all tracked projects" },
@@ -701,8 +701,8 @@ function getCategoryStats(startDate, endDate) {
     `
   ).all(startDate, endDate);
 }
-function registerStatsResources(server2) {
-  server2.registerResource(
+function registerStatsResources(server) {
+  server.registerResource(
     "stats-today",
     "screencap://stats/today",
     { description: "Today's time statistics by category" },
@@ -727,7 +727,7 @@ function registerStatsResources(server2) {
       };
     }
   );
-  server2.registerResource(
+  server.registerResource(
     "stats-week",
     "screencap://stats/week",
     { description: "This week's time statistics by category" },
@@ -755,8 +755,8 @@ function registerStatsResources(server2) {
 }
 
 // electron/mcp/resources/stories.ts
-function registerStoriesResources(server2) {
-  server2.registerResource(
+function registerStoriesResources(server) {
+  server.registerResource(
     "stories-latest",
     "screencap://stories/latest",
     { description: "Latest generated stories" },
@@ -791,18 +791,18 @@ function registerStoriesResources(server2) {
 }
 
 // electron/mcp/resources/index.ts
-function registerResources(server2) {
-  registerActivityResources(server2);
-  registerStatsResources(server2);
-  registerProjectsResources(server2);
-  registerStoriesResources(server2);
-  registerMemoriesResources(server2);
+function registerResources(server) {
+  registerActivityResources(server);
+  registerStatsResources(server);
+  registerProjectsResources(server);
+  registerStoriesResources(server);
+  registerMemoriesResources(server);
 }
 
 // electron/mcp/tools/analytics.ts
 import { z as z4 } from "zod";
-function registerAnalyticsTools(server2) {
-  server2.registerTool(
+function registerAnalyticsTools(server) {
+  server.registerTool(
     "get_time_summary",
     {
       description: "Get category/time breakdown for a period",
@@ -840,7 +840,7 @@ function registerAnalyticsTools(server2) {
       };
     }
   );
-  server2.registerTool(
+  server.registerTool(
     "get_app_usage",
     {
       description: "Get app usage statistics",
@@ -893,7 +893,7 @@ function registerAnalyticsTools(server2) {
       };
     }
   );
-  server2.registerTool(
+  server.registerTool(
     "get_website_usage",
     {
       description: "Get website usage statistics",
@@ -946,7 +946,7 @@ function registerAnalyticsTools(server2) {
       };
     }
   );
-  server2.registerTool(
+  server.registerTool(
     "compare_periods",
     {
       description: "Compare productivity across two time periods",
@@ -999,8 +999,8 @@ function registerAnalyticsTools(server2) {
 
 // electron/mcp/tools/awareness.ts
 import { z as z5 } from "zod";
-function registerAwarenessTools(server2) {
-  server2.registerTool(
+function registerAwarenessTools(server) {
+  server.registerTool(
     "get_addiction_stats",
     {
       description: "Get addiction tracking statistics",
@@ -1063,7 +1063,7 @@ function registerAwarenessTools(server2) {
       };
     }
   );
-  server2.registerTool(
+  server.registerTool(
     "get_focus_score",
     {
       description: "Get focus/distraction score for a day",
@@ -1140,8 +1140,8 @@ function getMimeType(path) {
 }
 
 // electron/mcp/tools/events.ts
-function registerEventTools(server2) {
-  server2.registerTool(
+function registerEventTools(server) {
+  server.registerTool(
     "query_events",
     {
       description: "Query activity events with flexible filters",
@@ -1212,7 +1212,7 @@ function registerEventTools(server2) {
       return { content };
     }
   );
-  server2.registerTool(
+  server.registerTool(
     "search_events",
     {
       description: "Full-text search across captions and window titles",
@@ -1273,7 +1273,7 @@ function registerEventTools(server2) {
       return { content };
     }
   );
-  server2.registerTool(
+  server.registerTool(
     "get_recent_activity",
     {
       description: "Get recent activity events (quick context)",
@@ -1314,7 +1314,7 @@ function registerEventTools(server2) {
       return { content };
     }
   );
-  server2.registerTool(
+  server.registerTool(
     "get_event_image",
     {
       description: "Get the screenshot image for a specific event",
@@ -1357,8 +1357,8 @@ function registerEventTools(server2) {
 
 // electron/mcp/tools/projects.ts
 import { z as z7 } from "zod";
-function registerProjectTools(server2) {
-  server2.registerTool(
+function registerProjectTools(server) {
+  server.registerTool(
     "get_project_progress",
     {
       description: "Get progress events for a project",
@@ -1413,7 +1413,7 @@ function registerProjectTools(server2) {
       return { content };
     }
   );
-  server2.registerTool(
+  server.registerTool(
     "list_projects",
     {
       description: "List all projects with event counts and last activity"
@@ -1451,7 +1451,7 @@ function registerProjectTools(server2) {
       };
     }
   );
-  server2.registerTool(
+  server.registerTool(
     "get_project_stats",
     {
       description: "Get detailed statistics for a project",
@@ -1503,29 +1503,34 @@ function registerProjectTools(server2) {
 }
 
 // electron/mcp/tools/index.ts
-function registerTools(server2) {
-  registerEventTools(server2);
-  registerAnalyticsTools(server2);
-  registerProjectTools(server2);
-  registerAwarenessTools(server2);
+function registerTools(server) {
+  registerEventTools(server);
+  registerAnalyticsTools(server);
+  registerProjectTools(server);
+  registerAwarenessTools(server);
+}
+
+// electron/mcp/server.ts
+async function startMcpServer() {
+  const server = new McpServer({
+    name: "screencap",
+    version: "1.0.0"
+  });
+  registerResources(server);
+  registerTools(server);
+  registerPrompts(server);
+  const shutdown = () => {
+    closeDatabase();
+    process.exit(0);
+  };
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+  process.stdin.on("end", shutdown);
+  process.stdin.on("close", shutdown);
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
 }
 
 // electron/mcp/index.ts
-var server = new McpServer({
-  name: "screencap",
-  version: "1.0.0"
-});
-registerResources(server);
-registerTools(server);
-registerPrompts(server);
-var transport = new StdioServerTransport();
-process.on("SIGINT", () => {
-  closeDatabase();
-  process.exit(0);
-});
-process.on("SIGTERM", () => {
-  closeDatabase();
-  process.exit(0);
-});
-await server.connect(transport);
+await startMcpServer();
 //# sourceMappingURL=index.js.map

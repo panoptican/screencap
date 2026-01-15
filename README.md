@@ -481,7 +481,7 @@ screencap/
 
 ## MCP Integration (Claude Desktop / Cursor)
 
-Screencap includes a built-in MCP server that exposes your activity data to Claude Desktop, Cursor, and other MCP-compatible tools. The MCP server is bundled with the app
+Screencap includes a built-in MCP server that exposes your activity data to Claude Desktop, Cursor, and other MCP-compatible tools. The MCP server is bundled with the app and does not require a separate build step.
 
 ### Configure Claude Desktop
 
@@ -491,8 +491,8 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 {
   "mcpServers": {
     "screencap": {
-      "command": "node",
-      "args": ["/Applications/Screencap.app/Contents/Resources/mcp/index.js"]
+      "command": "/Applications/Screencap.app/Contents/MacOS/Screencap",
+      "args": ["--mcp"]
     }
   }
 }

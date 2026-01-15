@@ -4,11 +4,7 @@ Screencap includes a built-in [Model Context Protocol (MCP)](https://modelcontex
 
 ## Configuration
 
-The MCP server is bundled with the app and can be found at:
-
-```
-/Applications/Screencap.app/Contents/Resources/mcp/index.js
-```
+The MCP server is bundled with the app and is started by running Screencap in MCP mode (`--mcp`).
 
 ### Claude Desktop
 
@@ -18,12 +14,22 @@ Add the following to your Claude Desktop configuration file (`~/Library/Applicat
 {
   "mcpServers": {
     "screencap": {
-      "command": "node",
-      "args": ["/Applications/Screencap.app/Contents/Resources/mcp/index.js"]
+      "command": "/Applications/Screencap.app/Contents/MacOS/Screencap",
+      "args": ["--mcp"]
     }
   }
 }
 ```
+
+### Manual run
+
+When started manually, the MCP server will appear to “run forever”. This is expected: it waits for a client (Claude Desktop / Cursor) to send JSON-RPC messages over stdin.
+
+To stop it, terminate the process (Ctrl+C in a terminal).
+
+### Debugging
+
+Set `SCREENCAP_MCP_DEBUG=1` to print server lifecycle and stdin activity to stderr.
 
 ### Custom Database Path
 
@@ -33,8 +39,8 @@ By default, the MCP server reads from the standard Screencap database location (
 {
   "mcpServers": {
     "screencap": {
-      "command": "node",
-      "args": ["/Applications/Screencap.app/Contents/Resources/mcp/index.js"],
+      "command": "/Applications/Screencap.app/Contents/MacOS/Screencap",
+      "args": ["--mcp"],
       "env": {
         "SCREENCAP_DB_PATH": "/path/to/custom/screencap.db"
       }
@@ -102,5 +108,4 @@ By default, the MCP server reads from the standard Screencap database location (
 ## Requirements
 
 - Screencap must have been run at least once to create the database
-- Node.js must be installed on your system
 - The MCP server opens the database in read-only mode
