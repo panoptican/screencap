@@ -1,4 +1,4 @@
-interface LogEntry {
+export interface LogEntry {
 	timestamp: string;
 	level: string;
 	scope: string;
@@ -9,10 +9,23 @@ interface LogEntry {
 const MAX_BUFFER_SIZE = 1000;
 const logBuffer: LogEntry[] = [];
 
+type LogObserver = (entry: LogEntry) => void;
+const observers = new Set<LogObserver>();
+
+export function addLogObserver(observer: LogObserver): () => void {
+	observers.add(observer);
+	return () => observers.delete(observer);
+}
+
 export function appendLog(entry: LogEntry): void {
 	logBuffer.push(entry);
 	if (logBuffer.length > MAX_BUFFER_SIZE) {
 		logBuffer.shift();
+	}
+	for (const observer of observers) {
+		try {
+			observer(entry);
+		} catch {}
 	}
 }
 

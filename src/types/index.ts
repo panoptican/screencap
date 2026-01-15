@@ -632,6 +632,19 @@ export interface LogsCollectResult {
 	appInfo: AppInfo;
 }
 
+export interface RendererLogEntry {
+	timestamp: string;
+	level: string;
+	windowKind: string;
+	message: string;
+}
+
+export interface CrashSessionLogSummary {
+	id: string;
+	createdAt: string;
+	sizeBytes: number;
+}
+
 declare global {
 	interface Window {
 		api: {
@@ -920,6 +933,9 @@ declare global {
 				collect: (rendererLogs?: string) => Promise<LogsCollectResult>;
 				copyToClipboard: (rendererLogs?: string) => Promise<void>;
 				saveToFile: (rendererLogs?: string) => Promise<string | null>;
+				appendRendererLogs: (entries: RendererLogEntry[]) => Promise<void>;
+				listCrashSessions: () => Promise<CrashSessionLogSummary[]>;
+				saveCrashSessionToFile: (id: string) => Promise<string | null>;
 			};
 			on: (
 				channel:

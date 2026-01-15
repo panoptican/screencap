@@ -6,6 +6,11 @@ import { z } from "zod";
 import { IpcChannels } from "../../../shared/ipc";
 import type { AppInfo, LogsCollectResult } from "../../../shared/types";
 import { formatLogsForExport, getLogBuffer } from "../../infra/log";
+import {
+	appendRendererLogsToSession,
+	listCrashSessionLogs,
+	saveCrashSessionLogToFile,
+} from "../../infra/log/sessionLogStore";
 import { secureHandle } from "../secure";
 
 declare const __BUILD_DATE__: string | undefined;
@@ -13,6 +18,22 @@ declare const __GIT_SHA__: string | undefined;
 declare const __RELEASE_CHANNEL__: string | undefined;
 
 const ipcLogsCollectArgs = z.tuple([z.string().optional()]);
+const noArgs = z.tuple([]);
+const crashLogIdArg = z.tuple([z.string().trim().min(1).max(256)]);
+const appendRendererLogsArgs = z.tuple([
+	z
+		.array(
+			z
+				.object({
+					timestamp: z.string().trim().min(1).max(128),
+					level: z.string().trim().min(1).max(32),
+					windowKind: z.string().trim().min(1).max(64),
+					message: z.string(),
+				})
+				.strip(),
+		)
+		.max(500),
+]);
 
 function getAppInfo(): AppInfo {
 	return {
@@ -133,6 +154,26 @@ export function registerLogsHandlers(): void {
 
 			await writeFile(dialogResult.filePath, result.logs, "utf-8");
 			return dialogResult.filePath;
+		},
+	);
+
+	secureHandle(
+		IpcChannels.Logs.AppendRendererLogs,
+		appendRendererLogsArgs,
+		(entries): void => {
+			appendRendererLogsToSession(entries);
+		},
+	);
+
+	secureHandle(IpcChannels.Logs.ListCrashSessions, noArgs, async () => {
+		return await listCrashSessionLogs();
+	});
+
+	secureHandle(
+		IpcChannels.Logs.SaveCrashSessionToFile,
+		crashLogIdArg,
+		async (id: string): Promise<string | null> => {
+			return await saveCrashSessionLogToFile(id);
 		},
 	);
 }

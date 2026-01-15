@@ -13,7 +13,21 @@ const logger = createLogger({ scope: "CaptureService" });
 const THUMBNAIL_WIDTH = 400;
 const ORIGINAL_WIDTH = 1280;
 const WEBP_QUALITY = 80;
+const WEBP_EFFORT = 2;
+const CAPTURE_MAX_DIM = 2560;
 const HIGH_RES_SUFFIX = ".hq.png";
+const HIGH_RES_WIDTH = CAPTURE_MAX_DIM;
+const PNG_COMPRESSION_LEVEL = 0;
+
+const BGRA_TO_RGB_RECOMB: [
+	[number, number, number],
+	[number, number, number],
+	[number, number, number],
+] = [
+	[0, 0, 1],
+	[0, 1, 0],
+	[1, 0, 0],
+];
 
 export interface RawCapture {
 	id: string;
@@ -44,39 +58,21 @@ export interface InstantCapture {
 const PREVIEW_WIDTH = 800;
 const PREVIEW_JPEG_QUALITY = 85;
 
-function bgraToRgba(bgra: Buffer, pixelCount: number): Buffer {
-	const view = new Uint32Array(bgra.buffer, bgra.byteOffset, pixelCount);
-	const result = new Uint32Array(pixelCount);
-
-	for (let i = 0; i < pixelCount; i++) {
-		const px = view[i];
-		result[i] =
-			(px & 0xff00ff00) |
-			((px >>> 16) & 0x000000ff) |
-			((px & 0x000000ff) << 16);
-	}
-
-	return Buffer.from(result.buffer);
-}
-
-function nativeImageToRgba(nativeImage: Electron.NativeImage): {
+function nativeImageToBgra(nativeImage: Electron.NativeImage): {
 	buffer: Buffer;
 	width: number;
 	height: number;
 } {
 	const size = nativeImage.getSize();
 	const bitmap = nativeImage.toBitmap();
-	const pixelCount = size.width * size.height;
-	const rgbaBuffer = bgraToRgba(bitmap, pixelCount);
-
 	return {
-		buffer: rgbaBuffer,
+		buffer: bitmap,
 		width: size.width,
 		height: size.height,
 	};
 }
 
-function createSharpFromRgba(
+function createSharpFromBgra(
 	buffer: Buffer,
 	width: number,
 	height: number,
@@ -98,8 +94,13 @@ function bestThumbnailSize(): { width: number; height: number } {
 		if (h > maxHeight) maxHeight = h;
 	}
 
-	if (maxWidth <= 0 || maxHeight <= 0) return { width: 1920, height: 1080 };
-	return { width: maxWidth, height: maxHeight };
+	if (maxWidth <= 0 || maxHeight <= 0)
+		return { width: CAPTURE_MAX_DIM, height: CAPTURE_MAX_DIM };
+
+	return {
+		width: Math.min(maxWidth, CAPTURE_MAX_DIM),
+		height: Math.min(maxHeight, CAPTURE_MAX_DIM),
+	};
 }
 
 function highResPathForId(id: string, originalsDir: string): string {
@@ -166,7 +167,7 @@ export async function processInstantCapture(
 
 	const rawSources = capture.sources.map((source) => ({
 		...source,
-		rgba: nativeImageToRgba(source.nativeImage),
+		bgra: nativeImageToBgra(source.nativeImage),
 	}));
 
 	const processPromises = rawSources.map(async (source) => {
@@ -174,22 +175,26 @@ export async function processInstantCapture(
 		const originalPath = join(originalsDir, `${source.id}.webp`);
 		const highResPath = highResPathForId(source.id, originalsDir);
 
+		const base = createSharpFromBgra(
+			source.bgra.buffer,
+			source.bgra.width,
+			source.bgra.height,
+		);
+
 		const [original, thumbnail] = await Promise.all([
-			createSharpFromRgba(
-				source.rgba.buffer,
-				source.rgba.width,
-				source.rgba.height,
-			)
+			base
+				.clone()
 				.resize(ORIGINAL_WIDTH, null, { withoutEnlargement: true })
-				.webp({ quality: WEBP_QUALITY })
+				.removeAlpha()
+				.recomb(BGRA_TO_RGB_RECOMB)
+				.webp({ quality: WEBP_QUALITY, effort: WEBP_EFFORT })
 				.toBuffer(),
-			createSharpFromRgba(
-				source.rgba.buffer,
-				source.rgba.width,
-				source.rgba.height,
-			)
+			base
+				.clone()
 				.resize(THUMBNAIL_WIDTH, null, { withoutEnlargement: true })
-				.webp({ quality: WEBP_QUALITY })
+				.removeAlpha()
+				.recomb(BGRA_TO_RGB_RECOMB)
+				.webp({ quality: WEBP_QUALITY, effort: WEBP_EFFORT })
 				.toBuffer(),
 		]);
 
@@ -199,12 +204,12 @@ export async function processInstantCapture(
 		];
 
 		if (highResDisplayId && source.displayId === highResDisplayId) {
-			const pngBuffer = await createSharpFromRgba(
-				source.rgba.buffer,
-				source.rgba.width,
-				source.rgba.height,
-			)
-				.png()
+			const pngBuffer = await base
+				.clone()
+				.resize(HIGH_RES_WIDTH, null, { withoutEnlargement: true })
+				.removeAlpha()
+				.recomb(BGRA_TO_RGB_RECOMB)
+				.png({ compressionLevel: PNG_COMPRESSION_LEVEL })
 				.toBuffer();
 			writePromises.push(writeFile(highResPath, pngBuffer));
 		}
@@ -246,14 +251,14 @@ export async function captureRawScreens(): Promise<RawCapture[]> {
 		if (nativeImage.isEmpty()) continue;
 
 		const display = displays.find((d) => source.display_id === String(d.id));
-		const rgba = nativeImageToRgba(nativeImage);
+		const bgra = nativeImageToBgra(nativeImage);
 
 		results.push({
 			id: uuid(),
 			displayId: source.display_id,
-			rawBuffer: rgba.buffer,
-			capturedWidth: rgba.width,
-			capturedHeight: rgba.height,
+			rawBuffer: bgra.buffer,
+			capturedWidth: bgra.width,
+			capturedHeight: bgra.height,
 			displayWidth: display?.size.width ?? 1920,
 			displayHeight: display?.size.height ?? 1080,
 			timestamp,
@@ -279,14 +284,26 @@ export async function processRawCaptures(
 		const originalPath = join(originalsDir, `${raw.id}.webp`);
 		const highResPath = highResPathForId(raw.id, originalsDir);
 
+		const base = createSharpFromBgra(
+			raw.rawBuffer,
+			raw.capturedWidth,
+			raw.capturedHeight,
+		);
+
 		const [original, thumbnail] = await Promise.all([
-			createSharpFromRgba(raw.rawBuffer, raw.capturedWidth, raw.capturedHeight)
+			base
+				.clone()
 				.resize(ORIGINAL_WIDTH, null, { withoutEnlargement: true })
-				.webp({ quality: WEBP_QUALITY })
+				.removeAlpha()
+				.recomb(BGRA_TO_RGB_RECOMB)
+				.webp({ quality: WEBP_QUALITY, effort: WEBP_EFFORT })
 				.toBuffer(),
-			createSharpFromRgba(raw.rawBuffer, raw.capturedWidth, raw.capturedHeight)
+			base
+				.clone()
 				.resize(THUMBNAIL_WIDTH, null, { withoutEnlargement: true })
-				.webp({ quality: WEBP_QUALITY })
+				.removeAlpha()
+				.recomb(BGRA_TO_RGB_RECOMB)
+				.webp({ quality: WEBP_QUALITY, effort: WEBP_EFFORT })
 				.toBuffer(),
 		]);
 
@@ -296,12 +313,12 @@ export async function processRawCaptures(
 		];
 
 		if (highResDisplayId && raw.displayId === highResDisplayId) {
-			const pngBuffer = await createSharpFromRgba(
-				raw.rawBuffer,
-				raw.capturedWidth,
-				raw.capturedHeight,
-			)
-				.png()
+			const pngBuffer = await base
+				.clone()
+				.resize(HIGH_RES_WIDTH, null, { withoutEnlargement: true })
+				.removeAlpha()
+				.recomb(BGRA_TO_RGB_RECOMB)
+				.png({ compressionLevel: PNG_COMPRESSION_LEVEL })
 				.toBuffer();
 			writePromises.push(writeFile(highResPath, pngBuffer));
 		}
@@ -330,7 +347,7 @@ export async function processRawCaptures(
 interface RawSourceData {
 	id: string;
 	displayId: string;
-	rgba: { buffer: Buffer; width: number; height: number };
+	bgra: { buffer: Buffer; width: number; height: number };
 	displayWidth: number;
 	displayHeight: number;
 }
@@ -370,14 +387,14 @@ export async function captureAllDisplays(options?: {
 		}
 
 		const display = displays.find((d) => source.display_id === String(d.id));
-		const rgba = nativeImageToRgba(nativeImage);
+		const bgra = nativeImageToBgra(nativeImage);
 
-		logger.debug(`Raw buffer size: ${rgba.buffer.length} bytes`);
+		logger.debug(`Raw buffer size: ${bgra.buffer.length} bytes`);
 
 		rawSources.push({
 			id: uuid(),
 			displayId: source.display_id,
-			rgba,
+			bgra,
 			displayWidth: display?.size.width ?? 1920,
 			displayHeight: display?.size.height ?? 1080,
 		});
@@ -388,14 +405,26 @@ export async function captureAllDisplays(options?: {
 		const originalPath = join(originalsDir, `${raw.id}.webp`);
 		const highResPath = highResPathForId(raw.id, originalsDir);
 
+		const base = createSharpFromBgra(
+			raw.bgra.buffer,
+			raw.bgra.width,
+			raw.bgra.height,
+		);
+
 		const [original, thumbnail] = await Promise.all([
-			createSharpFromRgba(raw.rgba.buffer, raw.rgba.width, raw.rgba.height)
+			base
+				.clone()
 				.resize(ORIGINAL_WIDTH, null, { withoutEnlargement: true })
-				.webp({ quality: WEBP_QUALITY })
+				.removeAlpha()
+				.recomb(BGRA_TO_RGB_RECOMB)
+				.webp({ quality: WEBP_QUALITY, effort: WEBP_EFFORT })
 				.toBuffer(),
-			createSharpFromRgba(raw.rgba.buffer, raw.rgba.width, raw.rgba.height)
+			base
+				.clone()
 				.resize(THUMBNAIL_WIDTH, null, { withoutEnlargement: true })
-				.webp({ quality: WEBP_QUALITY })
+				.removeAlpha()
+				.recomb(BGRA_TO_RGB_RECOMB)
+				.webp({ quality: WEBP_QUALITY, effort: WEBP_EFFORT })
 				.toBuffer(),
 		]);
 
@@ -405,12 +434,12 @@ export async function captureAllDisplays(options?: {
 		];
 
 		if (highResDisplayId && raw.displayId === highResDisplayId) {
-			const pngBuffer = await createSharpFromRgba(
-				raw.rgba.buffer,
-				raw.rgba.width,
-				raw.rgba.height,
-			)
-				.png()
+			const pngBuffer = await base
+				.clone()
+				.resize(HIGH_RES_WIDTH, null, { withoutEnlargement: true })
+				.removeAlpha()
+				.recomb(BGRA_TO_RGB_RECOMB)
+				.png({ compressionLevel: PNG_COMPRESSION_LEVEL })
 				.toBuffer();
 			writePromises.push(writeFile(highResPath, pngBuffer));
 		}
@@ -467,15 +496,17 @@ export async function captureForClassification(): Promise<Buffer | null> {
 		return null;
 	}
 
-	const rgba = nativeImageToRgba(nativeImage);
+	const bgra = nativeImageToBgra(nativeImage);
 
-	const resized = await createSharpFromRgba(
-		rgba.buffer,
-		rgba.width,
-		rgba.height,
+	const resized = await createSharpFromBgra(
+		bgra.buffer,
+		bgra.width,
+		bgra.height,
 	)
 		.resize(ORIGINAL_WIDTH, null, { withoutEnlargement: true })
-		.webp({ quality: WEBP_QUALITY })
+		.removeAlpha()
+		.recomb(BGRA_TO_RGB_RECOMB)
+		.webp({ quality: WEBP_QUALITY, effort: WEBP_EFFORT })
 		.toBuffer();
 
 	return resized;

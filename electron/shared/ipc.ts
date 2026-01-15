@@ -14,6 +14,7 @@ import type {
 	ClearableStorageCategory,
 	ContextStatus,
 	ContextTestResult,
+	CrashSessionLogSummary,
 	CreateShareResult,
 	DayWrappedSnapshot,
 	EodEntry,
@@ -37,6 +38,7 @@ import type {
 	ProjectShare,
 	ProjectStatsItem,
 	RecordedApp,
+	RendererLogEntry,
 	Room,
 	RoomInvite,
 	RoomMember,
@@ -223,6 +225,9 @@ export const IpcChannels = {
 		Collect: "logs:collect",
 		CopyToClipboard: "logs:copy-to-clipboard",
 		SaveToFile: "logs:save-to-file",
+		AppendRendererLogs: "logs:append-renderer-logs",
+		ListCrashSessions: "logs:list-crash-sessions",
+		SaveCrashSessionToFile: "logs:save-crash-session-to-file",
 	},
 } as const;
 
@@ -498,6 +503,11 @@ export interface IpcInvokeHandlers {
 	[IpcChannels.Logs.CopyToClipboard]: (rendererLogs?: string) => void;
 	[IpcChannels.Logs.SaveToFile]: (
 		rendererLogs?: string,
+	) => Promise<string | null>;
+	[IpcChannels.Logs.AppendRendererLogs]: (entries: RendererLogEntry[]) => void;
+	[IpcChannels.Logs.ListCrashSessions]: () => Promise<CrashSessionLogSummary[]>;
+	[IpcChannels.Logs.SaveCrashSessionToFile]: (
+		id: string,
 	) => Promise<string | null>;
 }
 

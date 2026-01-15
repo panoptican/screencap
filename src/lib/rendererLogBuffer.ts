@@ -5,8 +5,27 @@ interface RendererLogEntry {
 	data?: unknown;
 }
 
+type RendererLogForwardEntry = {
+	timestamp: string;
+	level: string;
+	windowKind: string;
+	message: string;
+};
+
 const MAX_BUFFER_SIZE = 500;
 const logBuffer: RendererLogEntry[] = [];
+const forwardQueue: RendererLogForwardEntry[] = [];
+let forwardTimer: number | null = null;
+let flushingForwardQueue = false;
+
+function getWindowKind(): string {
+	const hash = window.location.hash;
+	if (hash === "#popup") return "streak";
+	if (hash.startsWith("#popup-capture")) return "capture";
+	return "main";
+}
+
+const windowKind = getWindowKind();
 
 const originalConsole = {
 	log: console.log.bind(console),
@@ -15,6 +34,36 @@ const originalConsole = {
 	error: console.error.bind(console),
 };
 
+function canForward(): boolean {
+	return Boolean(window.api?.logs?.appendRendererLogs);
+}
+
+async function flushRendererLogsToMain(): Promise<void> {
+	if (flushingForwardQueue) return;
+	if (!canForward()) return;
+	if (forwardQueue.length === 0) return;
+	flushingForwardQueue = true;
+	try {
+		const batch = forwardQueue.splice(0, Math.min(200, forwardQueue.length));
+		if (batch.length === 0) return;
+		await window.api.logs.appendRendererLogs(batch);
+	} catch {
+	} finally {
+		flushingForwardQueue = false;
+		if (forwardQueue.length > 0) {
+			void flushRendererLogsToMain();
+		}
+	}
+}
+
+function scheduleForwardFlush(): void {
+	if (forwardTimer !== null) return;
+	forwardTimer = window.setTimeout(() => {
+		forwardTimer = null;
+		void flushRendererLogsToMain();
+	}, 750);
+}
+
 function appendLog(level: string, args: unknown[]): void {
 	const message = args
 		.map((arg) =>
@@ -22,11 +71,19 @@ function appendLog(level: string, args: unknown[]): void {
 		)
 		.join(" ");
 
+	const timestamp = new Date().toISOString();
 	logBuffer.push({
-		timestamp: new Date().toISOString(),
+		timestamp,
 		level,
 		message,
 	});
+
+	forwardQueue.push({ timestamp, level, windowKind, message });
+	if (forwardQueue.length >= 200) {
+		void flushRendererLogsToMain();
+	} else {
+		scheduleForwardFlush();
+	}
 
 	if (logBuffer.length > MAX_BUFFER_SIZE) {
 		logBuffer.shift();
@@ -34,6 +91,15 @@ function appendLog(level: string, args: unknown[]): void {
 }
 
 export function initRendererLogCapture(): void {
+	window.addEventListener("beforeunload", () => {
+		void flushRendererLogsToMain();
+	});
+	document.addEventListener("visibilitychange", () => {
+		if (document.visibilityState === "hidden") {
+			void flushRendererLogsToMain();
+		}
+	});
+
 	console.log = (...args: unknown[]) => {
 		appendLog("log", args);
 		originalConsole.log(...args);

@@ -734,3 +734,16 @@ export interface LogsCollectResult {
 	entryCount: number;
 	appInfo: AppInfo;
 }
+
+export interface RendererLogEntry {
+	timestamp: string;
+	level: string;
+	windowKind: string;
+	message: string;
+}
+
+export interface CrashSessionLogSummary {
+	id: string;
+	createdAt: string;
+	sizeBytes: number;
+}

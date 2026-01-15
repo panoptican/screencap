@@ -16,6 +16,7 @@ import type {
 	ClearableStorageCategory,
 	ContextStatus,
 	ContextTestResult,
+	CrashSessionLogSummary,
 	CreateShareResult,
 	DayWrappedSnapshot,
 	EodEntry,
@@ -39,6 +40,7 @@ import type {
 	ProjectShare,
 	ProjectStatsItem,
 	RecordedApp,
+	RendererLogEntry,
 	Room,
 	RoomInvite,
 	RoomMember,
@@ -473,6 +475,12 @@ const api = {
 			ipcRenderer.invoke(IpcChannels.Logs.CopyToClipboard, rendererLogs),
 		saveToFile: (rendererLogs?: string): Promise<string | null> =>
 			ipcRenderer.invoke(IpcChannels.Logs.SaveToFile, rendererLogs),
+		appendRendererLogs: (entries: RendererLogEntry[]): Promise<void> =>
+			ipcRenderer.invoke(IpcChannels.Logs.AppendRendererLogs, entries),
+		listCrashSessions: (): Promise<CrashSessionLogSummary[]> =>
+			ipcRenderer.invoke(IpcChannels.Logs.ListCrashSessions),
+		saveCrashSessionToFile: (id: string): Promise<string | null> =>
+			ipcRenderer.invoke(IpcChannels.Logs.SaveCrashSessionToFile, id),
 	},
 
 	on: (channel: string, callback: (...args: unknown[]) => void) => {

@@ -31,6 +31,7 @@ import type {
 	AppInfo,
 	ContextStatus,
 	ContextTestResult,
+	CrashSessionLogSummary,
 	Settings,
 	UpdateState,
 } from "@/types";
@@ -228,6 +229,14 @@ export function SystemTab({
 		status: "idle" | "copying" | "saving" | "copied" | "saved" | "error";
 		message?: string;
 	}>({ status: "idle" });
+	const [crashLogs, setCrashLogs] = useState<CrashSessionLogSummary[]>([]);
+	const [crashLogsLoading, setCrashLogsLoading] = useState(false);
+	const [crashLogsError, setCrashLogsError] = useState<string | null>(null);
+	const [crashLogsAction, setCrashLogsAction] = useState<{
+		status: "idle" | "saving" | "saved" | "error";
+		id?: string;
+		message?: string;
+	}>({ status: "idle" });
 	const [showResetConfirm, setShowResetConfirm] = useState(false);
 	const [isResetting, setIsResetting] = useState(false);
 	const [customBackendUrl, setCustomBackendUrl] = useState(
@@ -273,6 +282,24 @@ export function SystemTab({
 			unsubscribe();
 		};
 	}, []);
+
+	const loadCrashLogs = useCallback(async () => {
+		if (!window.api) return;
+		setCrashLogsLoading(true);
+		setCrashLogsError(null);
+		try {
+			const logs = await window.api.logs.listCrashSessions();
+			setCrashLogs(logs);
+		} catch (error) {
+			setCrashLogsError(String(error));
+		} finally {
+			setCrashLogsLoading(false);
+		}
+	}, []);
+
+	useEffect(() => {
+		void loadCrashLogs();
+	}, [loadCrashLogs]);
 
 	const handleTestContextDetection = useCallback(async () => {
 		if (!window.api) return;
@@ -383,6 +410,30 @@ export function SystemTab({
 		} catch (error) {
 			setLogsAction({
 				status: "error",
+				message: String(error),
+			});
+		}
+	}, []);
+
+	const handleSaveCrashLog = useCallback(async (id: string) => {
+		if (!window.api) return;
+		setCrashLogsAction({ status: "saving", id });
+		try {
+			const filePath = await window.api.logs.saveCrashSessionToFile(id);
+			if (filePath) {
+				setCrashLogsAction({
+					status: "saved",
+					id,
+					message: `Saved to ${filePath}`,
+				});
+				setTimeout(() => setCrashLogsAction({ status: "idle" }), 3000);
+			} else {
+				setCrashLogsAction({ status: "idle" });
+			}
+		} catch (error) {
+			setCrashLogsAction({
+				status: "error",
+				id,
 				message: String(error),
 			});
 		}
@@ -691,6 +742,92 @@ export function SystemTab({
 						<div className="text-xs text-muted-foreground">
 							<Bug className="inline h-3 w-3 mr-1" />
 							{getRendererLogCount()} renderer logs buffered
+						</div>
+						<div className="pt-3 border-t border-border/40 space-y-2">
+							<div className="flex items-center justify-between">
+								<div className="text-sm font-medium">Previous crash logs</div>
+								<Button
+									variant="ghost"
+									size="sm"
+									className="h-7 text-xs"
+									onClick={loadCrashLogs}
+									disabled={crashLogsLoading}
+								>
+									<RefreshCw
+										className={cn(
+											"h-3.5 w-3.5",
+											crashLogsLoading && "animate-spin",
+										)}
+									/>
+									Refresh
+								</Button>
+							</div>
+							{crashLogsError && (
+								<div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive">
+									<AlertCircle className="h-4 w-4 shrink-0" />
+									<span className="text-sm">{crashLogsError}</span>
+								</div>
+							)}
+							{crashLogs.length === 0 && !crashLogsError ? (
+								<p className="text-sm text-muted-foreground">
+									No crash logs saved yet.
+								</p>
+							) : (
+								<div className="space-y-2">
+									{crashLogs.slice(0, 5).map((log) => (
+										<div
+											key={log.id}
+											className="flex items-center justify-between gap-3 p-3 rounded-lg bg-muted/30"
+										>
+											<div className="min-w-0">
+												<div className="text-sm font-mono truncate">
+													{new Date(log.createdAt).toLocaleString()}
+												</div>
+												<div className="text-xs text-muted-foreground">
+													{(log.sizeBytes / 1024).toFixed(1)} KB
+												</div>
+											</div>
+											<Button
+												variant="outline"
+												size="sm"
+												className="h-8"
+												onClick={() => handleSaveCrashLog(log.id)}
+												disabled={
+													crashLogsAction.status === "saving" &&
+													crashLogsAction.id === log.id
+												}
+											>
+												{crashLogsAction.status === "saving" &&
+												crashLogsAction.id === log.id ? (
+													<Loader2 className="h-4 w-4 animate-spin" />
+												) : crashLogsAction.status === "saved" &&
+													crashLogsAction.id === log.id ? (
+													<Check className="h-4 w-4 text-green-500" />
+												) : (
+													<FileText className="h-4 w-4" />
+												)}
+												Save
+											</Button>
+										</div>
+									))}
+								</div>
+							)}
+							{crashLogsAction.status === "saved" &&
+								crashLogsAction.message && (
+									<div className="flex items-center gap-2 p-3 rounded-lg bg-green-500/10 text-green-600 dark:text-green-400">
+										<Check className="h-4 w-4" />
+										<span className="text-sm font-mono truncate">
+											{crashLogsAction.message}
+										</span>
+									</div>
+								)}
+							{crashLogsAction.status === "error" &&
+								crashLogsAction.message && (
+									<div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive">
+										<AlertCircle className="h-4 w-4 shrink-0" />
+										<span className="text-sm">{crashLogsAction.message}</span>
+									</div>
+								)}
 						</div>
 					</div>
 				</Panel>
