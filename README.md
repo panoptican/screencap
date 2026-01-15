@@ -481,15 +481,7 @@ screencap/
 
 ## MCP Integration (Claude Desktop / Cursor)
 
-Screencap includes an MCP (Model Context Protocol) server that exposes your activity data to Claude Desktop, Cursor, and other MCP-compatible tools.
-
-### Build the MCP Server
-
-```bash
-npm run build:mcp
-```
-
-This creates `dist-mcp/index.js` — a standalone Node.js script.
+Screencap includes a built-in MCP server that exposes your activity data to Claude Desktop, Cursor, and other MCP-compatible tools. The MCP server is bundled with the app
 
 ### Configure Claude Desktop
 
@@ -500,11 +492,13 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
   "mcpServers": {
     "screencap": {
       "command": "node",
-      "args": ["/path/to/screencap/dist-mcp/index.js"]
+      "args": ["/Applications/Screencap.app/Contents/Resources/mcp/index.js"]
     }
   }
 }
 ```
+
+For detailed documentation, see [MCP Server Guide](docs/mcp-server.md).
 
 
 ### Available Tools

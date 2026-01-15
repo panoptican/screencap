@@ -20,6 +20,10 @@ extraResources:
     to: sounds
     filter:
       - notification.wav
+  - from: dist-mcp
+    to: mcp
+    filter:
+      - index.js
 asarUnpack:
   - node_modules/sharp/**/*
   - node_modules/better-sqlite3/**/*
