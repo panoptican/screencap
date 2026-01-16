@@ -1,3 +1,10 @@
+## [1.17.1](https://github.com/yahorbarkouski/screencap/compare/v1.17.0...v1.17.1) (2026-01-16)
+
+
+### Bug Fixes
+
+* big performance optimisations ([e3916cf](https://github.com/yahorbarkouski/screencap/commit/e3916cfd15a72c24847af8139d094fb223897300))
+
 # [1.17.0](https://github.com/yahorbarkouski/screencap/compare/v1.16.0...v1.17.0) (2026-01-15)
 
 
