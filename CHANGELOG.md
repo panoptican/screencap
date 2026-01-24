@@ -1,3 +1,15 @@
+# [1.18.0](https://github.com/yahorbarkouski/screencap/compare/v1.17.1...v1.18.0) (2026-01-24)
+
+
+### Bug Fixes
+
+* addiction tracking from local retrieval ([7b4a9a5](https://github.com/yahorbarkouski/screencap/commit/7b4a9a552583bd4c06c62856a83d7cf2b569bc09))
+
+
+### Features
+
+* reminders and notes ([222687b](https://github.com/yahorbarkouski/screencap/commit/222687b89f201d080c3c74c40464c65e2fc0d657))
+
 ## [1.17.1](https://github.com/yahorbarkouski/screencap/compare/v1.17.0...v1.17.1) (2026-01-16)
 
 
