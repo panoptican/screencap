@@ -468,7 +468,10 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 				onOpenChange(isOpen);
 			}}
 		>
-			<DialogContent className="max-w-3xl h-[min(92vh,980px)] p-0 overflow-hidden bg-background/95 backdrop-blur-xl border-border/50 shadow-2xl flex flex-col gap-0 outline-none">
+			<DialogContent
+				className="max-w-3xl h-[min(92vh,980px)] p-0 overflow-hidden bg-background/95 backdrop-blur-xl border-border/50 shadow-2xl flex flex-col gap-0 outline-none"
+				aria-describedby={undefined}
+			>
 				<div className="flex items-start justify-between pl-6 pr-14 py-2 border-b border-border/20 shrink-0 bg-background/40">
 					<div className="min-w-0 py-2 overflow-visible">
 						<div className="flex flex-wrap items-center gap-2 min-w-0 overflow-visible">
@@ -766,6 +769,85 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 								)}
 
 								<div className="rounded-xl border border-border/30 overflow-hidden divide-y divide-border/20">
+									{(event.trackedAddiction || event.addictionCandidate) && (
+										<div
+											className={cn(
+												"px-4 py-3",
+												event.trackedAddiction
+													? "bg-destructive/5"
+													: "bg-amber-500/5",
+											)}
+										>
+											<div className="flex items-start justify-between gap-4">
+												<div className="min-w-0">
+													<div className="flex items-center gap-2">
+														<Activity
+															className={cn(
+																"h-4 w-4 shrink-0",
+																event.trackedAddiction
+																	? "text-destructive"
+																	: "text-amber-500",
+															)}
+														/>
+														<div
+															className={cn(
+																"text-sm font-semibold truncate",
+																event.trackedAddiction
+																	? "text-destructive"
+																	: "text-amber-500",
+															)}
+														>
+															{event.trackedAddiction
+																? `Addiction detected: ${event.trackedAddiction}`
+																: `Potential addiction: ${event.addictionCandidate}`}
+														</div>
+													</div>
+													{!event.trackedAddiction && event.addictionPrompt && (
+														<p className="mt-2 text-xs text-muted-foreground leading-relaxed">
+															{event.addictionPrompt}
+														</p>
+													)}
+												</div>
+												{event.addictionConfidence != null && (
+													<div className="text-xs text-muted-foreground font-mono whitespace-nowrap">
+														{Math.round(event.addictionConfidence * 100)}%
+													</div>
+												)}
+											</div>
+											{!event.trackedAddiction && (
+												<div className="mt-3 flex justify-end gap-2">
+													<Button
+														size="sm"
+														variant="ghost"
+														className="h-8 text-xs bg-background/10 hover:bg-background/20"
+														onClick={handleRejectAddiction}
+													>
+														Reject
+													</Button>
+													<Button
+														size="sm"
+														className="h-8 text-xs bg-amber-500 hover:bg-amber-600 text-white border-0"
+														onClick={handleConfirmAddiction}
+													>
+														Confirm
+													</Button>
+												</div>
+											)}
+											{event.trackedAddiction && (
+												<div className="mt-3 flex justify-end">
+													<Button
+														size="sm"
+														variant="ghost"
+														className="h-8 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+														onClick={handleRejectAddiction}
+													>
+														Not an addiction
+													</Button>
+												</div>
+											)}
+										</div>
+									)}
+
 									<div
 										className={cn(
 											"px-4 py-3",
@@ -993,85 +1075,6 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 										</div>
 									)}
 
-									{(event.trackedAddiction || event.addictionCandidate) && (
-										<div
-											className={cn(
-												"px-4 py-3",
-												event.trackedAddiction
-													? "bg-destructive/5"
-													: "bg-amber-500/5",
-											)}
-										>
-											<div className="flex items-start justify-between gap-4">
-												<div className="min-w-0">
-													<div className="flex items-center gap-2">
-														<Activity
-															className={cn(
-																"h-4 w-4 shrink-0",
-																event.trackedAddiction
-																	? "text-destructive"
-																	: "text-amber-500",
-															)}
-														/>
-														<div
-															className={cn(
-																"text-sm font-semibold truncate",
-																event.trackedAddiction
-																	? "text-destructive"
-																	: "text-amber-500",
-															)}
-														>
-															{event.trackedAddiction
-																? `Addiction detected: ${event.trackedAddiction}`
-																: `Potential addiction: ${event.addictionCandidate}`}
-														</div>
-													</div>
-													{!event.trackedAddiction && event.addictionPrompt && (
-														<p className="mt-2 text-xs text-muted-foreground leading-relaxed">
-															{event.addictionPrompt}
-														</p>
-													)}
-												</div>
-												{event.addictionConfidence != null && (
-													<div className="text-xs text-muted-foreground font-mono whitespace-nowrap">
-														{Math.round(event.addictionConfidence * 100)}%
-													</div>
-												)}
-											</div>
-											{!event.trackedAddiction && (
-												<div className="mt-3 flex justify-end gap-2">
-													<Button
-														size="sm"
-														variant="ghost"
-														className="h-8 text-xs bg-background/10 hover:bg-background/20"
-														onClick={handleRejectAddiction}
-													>
-														Reject
-													</Button>
-													<Button
-														size="sm"
-														className="h-8 text-xs bg-amber-500 hover:bg-amber-600 text-white border-0"
-														onClick={handleConfirmAddiction}
-													>
-														Confirm
-													</Button>
-												</div>
-											)}
-											{event.trackedAddiction && (
-												<div className="mt-3 flex justify-end">
-													<Button
-														size="sm"
-														variant="ghost"
-														className="h-8 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
-														onClick={handleRejectAddiction}
-													>
-														Not an addiction
-													</Button>
-												</div>
-											)}
-										</div>
-									)}
-
 									<div className="px-4 py-3">
 										<div className="text-[10px] font-mono tracking-[0.2em] text-muted-foreground uppercase mb-2">
 											Actions
@@ -1175,7 +1178,10 @@ export function EventPreview({ event, open, onOpenChange }: EventPreviewProps) {
 			</DialogContent>
 
 			<Dialog open={expandedImage} onOpenChange={setExpandedImage}>
-				<DialogContent className="max-w-[95vw] max-h-[95vh] w-auto h-auto p-0 overflow-hidden bg-black/95 backdrop-blur-xl border-border/20 shadow-2xl outline-none">
+				<DialogContent
+					className="max-w-[95vw] max-h-[95vh] w-auto h-auto p-0 overflow-hidden bg-black/95 backdrop-blur-xl border-border/20 shadow-2xl outline-none"
+					aria-describedby={undefined}
+				>
 					<DialogTitle className="sr-only">Expanded image view</DialogTitle>
 					<ContextMenu>
 						<ContextMenuTrigger asChild>

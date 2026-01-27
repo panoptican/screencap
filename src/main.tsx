@@ -2,7 +2,6 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { SelectionOverlay } from "./components/overlay/SelectionOverlay";
-import { FpsGuard } from "./components/performance/FpsGuard";
 import { ProjectProgressCapturePopup } from "./components/popup/ProjectProgressCapturePopup";
 import { SmartReminderPopup } from "./components/popup/SmartReminderPopup";
 import { StreakPopup } from "./components/popup/StreakPopup";
@@ -41,7 +40,6 @@ try {
 
 	ReactDOM.createRoot(rootElement).render(
 		<React.StrictMode>
-			<FpsGuard />
 			<Root />
 		</React.StrictMode>,
 	);

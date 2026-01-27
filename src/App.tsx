@@ -15,6 +15,7 @@ import { SettingsView } from "@/components/settings/SettingsView";
 import { StoryView } from "@/components/story/StoryView";
 import { Timeline } from "@/components/timeline/Timeline";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { PerformanceProvider } from "@/contexts/PerformanceContext";
 import { useMemories } from "@/hooks/useMemories";
 import { usePermission } from "@/hooks/usePermission";
 import { useSettings } from "@/hooks/useSettings";
@@ -138,14 +139,17 @@ export default function App() {
 
 	if (showOnboarding) {
 		return (
-			<TooltipProvider>
-				<OnboardingWizard onComplete={handleOnboardingComplete} />
-			</TooltipProvider>
+			<PerformanceProvider>
+				<TooltipProvider>
+					<OnboardingWizard onComplete={handleOnboardingComplete} />
+				</TooltipProvider>
+			</PerformanceProvider>
 		);
 	}
 
 	return (
-		<TooltipProvider>
+		<PerformanceProvider>
+			<TooltipProvider>
 			<div className="relative flex h-screen flex-col overflow-hidden bg-background">
 				<AppBackdrop />
 				<Titlebar />
@@ -174,6 +178,7 @@ export default function App() {
 					onClose={() => setPreviewEvent(null)}
 				/>
 			</div>
-		</TooltipProvider>
+			</TooltipProvider>
+		</PerformanceProvider>
 	);
 }

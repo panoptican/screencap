@@ -35,16 +35,34 @@ type ManualCaptureOptions = {
 
 const DEFAULT_INTERVAL_MINUTES = 5;
 const IDLE_SKIP_SECONDS = 5 * 60;
+const CAPTURE_TIMEOUT_MS = 60 * 1000; // 60 seconds max for a capture operation
 
 let state: SchedulerState = "stopped";
 let captureInterval: NodeJS.Timeout | null = null;
 let currentIntervalMinutes = DEFAULT_INTERVAL_MINUTES;
 let captureLock: Promise<void> | null = null;
+let captureLockAcquiredAt: number | null = null;
 
 type CapturedWindow = Extract<WindowedCaptureResult, { kind: "capture" }>;
 
 function getIntervalMs(): number {
 	return currentIntervalMinutes * 60 * 1000;
+}
+
+function checkAndReleaseStaleLock(): boolean {
+	if (captureLock && captureLockAcquiredAt) {
+		const heldFor = Date.now() - captureLockAcquiredAt;
+		if (heldFor > CAPTURE_TIMEOUT_MS) {
+			logger.warn("Capture lock held too long, force releasing", {
+				heldForMs: heldFor,
+				timeoutMs: CAPTURE_TIMEOUT_MS,
+			});
+			captureLock = null;
+			captureLockAcquiredAt = null;
+			return true;
+		}
+	}
+	return false;
 }
 
 async function processCapturedWindow(
@@ -73,6 +91,9 @@ async function processCapturedWindow(
 }
 
 async function runWindowedCaptureCycle(): Promise<CaptureTriggerResult> {
+	// Check if an existing lock is stale and should be released
+	checkAndReleaseStaleLock();
+
 	if (captureLock) {
 		logger.debug("Capture already in progress, skipping");
 		return { merged: false, eventId: null };
@@ -82,6 +103,7 @@ async function runWindowedCaptureCycle(): Promise<CaptureTriggerResult> {
 	captureLock = new Promise<void>((resolve) => {
 		releaseLock = resolve;
 	});
+	captureLockAcquiredAt = Date.now();
 
 	try {
 		const hasPermission = checkScreenCapturePermission();
@@ -129,6 +151,7 @@ async function runWindowedCaptureCycle(): Promise<CaptureTriggerResult> {
 	} finally {
 		releaseLock();
 		captureLock = null;
+		captureLockAcquiredAt = null;
 	}
 }
 
@@ -136,6 +159,9 @@ async function runCaptureCycle(
 	reason: "scheduled" | "manual",
 	options?: ManualCaptureOptions,
 ): Promise<CaptureTriggerResult> {
+	// Check if an existing lock is stale and should be released
+	checkAndReleaseStaleLock();
+
 	if (captureLock) {
 		if (reason === "scheduled") {
 			logger.debug("Capture already in progress, skipping");
@@ -149,6 +175,7 @@ async function runCaptureCycle(
 	captureLock = new Promise<void>((resolve) => {
 		releaseLock = resolve;
 	});
+	captureLockAcquiredAt = Date.now();
 
 	try {
 		const hasPermission = checkScreenCapturePermission();
@@ -251,6 +278,7 @@ async function runCaptureCycle(
 	} finally {
 		releaseLock();
 		captureLock = null;
+		captureLockAcquiredAt = null;
 	}
 }
 
@@ -288,7 +316,9 @@ export function startScheduler(intervalMinutes?: number): void {
 	});
 
 	captureInterval = setInterval(() => {
-		tick();
+		tick().catch((error) => {
+			logger.error("Scheduler tick failed:", error);
+		});
 	}, intervalMs);
 }
 

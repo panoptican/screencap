@@ -33,6 +33,11 @@ export function Titlebar() {
 				</button>
 
 				<div className="flex items-center justify-end gap-1">
+					{import.meta.env.DEV && (
+						<span className="rounded bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-black">
+							Dev
+						</span>
+					)}
 					<Button
 						aria-label="Open GitHub"
 						variant="ghost"

@@ -24,6 +24,8 @@ function areEventFiltersEqual(a: EventFilters, b: EventFilters): boolean {
 		a.category === b.category &&
 		a.project === b.project &&
 		a.projectProgress === b.projectProgress &&
+		a.trackedAddiction === b.trackedAddiction &&
+		a.needsAddictionReview === b.needsAddictionReview &&
 		a.appBundleId === b.appBundleId &&
 		a.urlHost === b.urlHost &&
 		a.startDate === b.startDate &&

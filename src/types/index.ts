@@ -286,6 +286,8 @@ export interface EventFilters {
 	category?: string;
 	project?: string;
 	projectProgress?: boolean;
+	trackedAddiction?: string;
+	needsAddictionReview?: boolean;
 	appBundleId?: string;
 	urlHost?: string;
 	startDate?: number;
@@ -781,6 +783,7 @@ declare global {
 					projectProgress?: boolean;
 					trackedAddiction?: string;
 					hasTrackedAddiction?: boolean;
+					needsAddictionReview?: boolean;
 					appBundleId?: string;
 					urlHost?: string;
 					startDate?: number;
@@ -788,6 +791,22 @@ declare global {
 					search?: string;
 					dismissed?: boolean;
 				}) => Promise<Event[]>;
+				getEventsCount: (options: {
+					limit?: number;
+					offset?: number;
+					category?: string;
+					project?: string;
+					projectProgress?: boolean;
+					trackedAddiction?: string;
+					hasTrackedAddiction?: boolean;
+					needsAddictionReview?: boolean;
+					appBundleId?: string;
+					urlHost?: string;
+					startDate?: number;
+					endDate?: number;
+					search?: string;
+					dismissed?: boolean;
+				}) => Promise<number>;
 				getUnifiedEvents: (options: {
 					limit?: number;
 					offset?: number;
@@ -796,6 +815,7 @@ declare global {
 					projectProgress?: boolean;
 					trackedAddiction?: string;
 					hasTrackedAddiction?: boolean;
+					needsAddictionReview?: boolean;
 					appBundleId?: string;
 					urlHost?: string;
 					startDate?: number;

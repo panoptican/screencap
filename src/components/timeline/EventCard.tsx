@@ -17,6 +17,7 @@ import {
 	ContextMenuItem,
 	ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { useAdaptiveImageQuality } from "@/hooks/useAdaptiveFeatures";
 import { useImageBrightness } from "@/hooks/useImageBrightness";
 import { copyBestImage } from "@/lib/copyImage";
 import { isNsfwEvent } from "@/lib/nsfw";
@@ -159,9 +160,18 @@ export const EventCard = memo(function EventCard({
 		[event.originalPath, event.projectProgress, event.thumbnailPath],
 	);
 
-	const preferredImagePath = hqPath ?? fallbackLowResPath ?? null;
+	const { preferThumbnails, skipBrightnessDetection } = useAdaptiveImageQuality();
+
+	const preferredImagePath = preferThumbnails
+		? (event.thumbnailPath ?? fallbackLowResPath ?? null)
+		: (hqPath ?? fallbackLowResPath ?? null);
 	const [imagePath, setImagePath] = useState<string | null>(preferredImagePath);
-	const brightness = useImageBrightness(imagePath);
+	const brightnessResult = useImageBrightness(
+		skipBrightnessDetection ? null : imagePath,
+	);
+	const brightness = skipBrightnessDetection
+		? { bottomRight: "dark" as const, topLeft: "dark" as const, topRight: "dark" as const }
+		: brightnessResult;
 
 	useEffect(() => {
 		setImagePath(preferredImagePath);
